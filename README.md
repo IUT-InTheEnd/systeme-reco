@@ -7,6 +7,7 @@ Livrables : rapport, supports de présentation et codes sources
 - Item-based : regroupement par musiques
 - Model-hybride : user-based & item-based
 
+## Ce qui va être intéressant
 - Choisir avec pertinence les attributs qu'on utilise
 - Ne pas se contenter d'un seul système résultant du TD, faire preuve d'initiative
 - Présenter nos résultats : comparez plusieurs systèmes qu'on a testé et défendre le meilleur
