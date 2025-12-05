@@ -1,7 +1,6 @@
 import math
 
 
-
 # fonctions de base sur les vecteurs
 
 def prodScal(a, b):
@@ -45,7 +44,6 @@ def distEucl(vectA, vectB):
     return math.sqrt(res)
 
 
-
 # fonctions de similarité
 
 def simCos(vectA, vectB):
@@ -66,7 +64,6 @@ def jacc(vectA, vectB):
     if u == 0:
         return 0  
     return inter(vectA, vectB) / u
-
 
 
 # fonction de prédiction item-based 
@@ -93,3 +90,33 @@ def itemBased(u, i, matr, items):
         return 0  
 
     return sNumerateur / sDenominateur
+
+
+# tester l'item-based sur chaque musique que l'utilisateur n'a pas écouté et recommander les musiques avec la prédiction la plus élevée
+def recommend(u, matr, items, n):
+    predictions = []
+
+    for i in range(len(items)):
+        if matr[u][i] == 0:   # l’utilisateur n’a pas noté l’item
+            pred = itemBased(u, i, matr, items)
+            predictions.append((i, pred))
+
+    predictions.sort(key=lambda x: x[1], reverse=True) # trier pour pouvoir renvoyer les n meilleures
+
+    return predictions[:n]  # retourner les K meilleurs
+
+
+
+
+'''
+reste à faire 
+
+charger la base et récupérer les données
+
+établir une liste des vecteurs de cractéristiques des musiques ([pop -> 1, rock -> 2 ...; groupe -> 1, single -> 2; niveau_explicit : pas explicit -> 1, un peu -> 2, moyen -> 3, très -> 4.....])
+
+prénoter certains morceaux avec les artistes / musiques qu'ils ont proposé dans le questionnaire
+
+tester le tout en recommandant et évaluant la qualité de la recommandation
+
+'''
