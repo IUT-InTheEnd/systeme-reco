@@ -1,5 +1,6 @@
 import math
-
+import pandas as pd 
+import psycopg2
 
 # fonctions de base sur les vecteurs
 
@@ -106,7 +107,32 @@ def recommend(u, matr, items, n):
     return predictions[:n]  # retourner les K meilleurs
 
 
+def connection_db():
+    return psycopg2.connect(
+        dbname="InTheEnd_DB",
+        user="InTheEnd_User",
+        password="InTheEnd_Password",
+        host="localhost",
+        port="25000"
+    )
 
+
+def load_tracks():
+    
+    conn = connection_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * from sae5_6.track JOIN sae5_6.track_echonest on sae5_6.track.track_id =  sae5_6.track_echonest.track_id")
+    data = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]  
+    df = pd.DataFrame(data, columns=columns)
+
+    cur.close()
+    conn.close()
+    return df
+
+tracks = load_tracks()
+
+print(tracks)
 
 '''
 reste à faire 
