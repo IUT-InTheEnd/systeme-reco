@@ -130,9 +130,25 @@ def load_tracks():
     conn.close()
     return df
 
+def load_users():
+    
+    conn = connection_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
+    data = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]  
+    df = pd.DataFrame(data, columns=columns)
+
+    cur.close()
+    conn.close()
+    return df
+
+
 tracks = load_tracks()
+users = load_users()
 
 print(tracks)
+print(users)
 
 '''
 reste à faire 
