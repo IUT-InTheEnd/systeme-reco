@@ -1,5 +1,4 @@
 import psycopg2
-import psycopg2.extras
 
 def connection_db():
     return psycopg2.connect(
@@ -45,29 +44,65 @@ def main():
         user_avg_song_length = user[23]
         user_avg_daily_listen_time = user[24]
         user_recommanded_artists = user[25]
-        
+
         # Récupère les genres préférés de l'utilisateur
         cursor.execute("SELECT genre_id FROM sae5_6.ajoute_genre_favoris WHERE user_id = %s;", (user_id,))
         fav_genres = cursor.fetchall()
         fav_genres_ids = []
         fav_genres_ids = [genre[0] for genre in fav_genres]
 
-            
-        # Récupère les musics qui satisfait le genre favoris, l'explicit ok, la durée moyenne des chansons et un like sur chaque user_recommanded_artists
+        # Récupère les musics qui satisfait le genre favoris, l'explicit ok, la durée moyenne des chansons
         query = """
-                SELECT m.track_id, m.artist_id, m.album_id
-                FROM sae5_6.track m
-                WHERE m.genre_id = ANY(%s)
-                AND (%s = 1 OR m.explicit = 0)
-                AND m.duration <= %s + 30
-                AND m.duration >= %s - 30
-                AND (%s = '{}' OR m.artist_id = ANY(%s))
+                SELECT m.track_id, r.artist_id, r.album_id
+                FROM (sae5_6.track m
+                    INNER JOIN sae5_6.realiser r ON m.track_id = r.track_id)
+                    INNER JOIN sae5_6.contient_genres cg ON m.track_id = cg.track_id
+                WHERE cg.genre_id = ANY(%s)
+                AND (%s = 1 OR m.track_explicit = false)
+                AND m.track_duration <= %s + 30
+                AND m.track_duration >= %s - 30
                 LIMIT 10;
             """
         
-        fav_musics = cursor.fetchall()
-        print(fav_musics)
-        ()    
+        cursor.execute(query, (fav_genres_ids, user_explicit_ok, user_avg_song_length, user_avg_song_length))
+        musics = cursor.fetchall()
+        
+        # Insère les musics dans les favoris de l'utilisateur et génère un nombre d'écoute entre 1 et 300
+        
+        for music in musics:
+            track_id = music[0]
+            artist_id = music[1]
+            album_id = music[2]
+            
+            # Insérer dans user_ecoute
+            cursor.execute(
+                "INSERT INTO sae5_6.user_ecoute (user_id, track_id, nb_ecoute) VALUES (%s, %s, FLOOR(RANDOM() * 300) + 1) ON CONFLICT DO NOTHING;",
+                (user_id, track_id)
+            )
+            
+            # Insérer dans ajoute_favori
+            cursor.execute(
+                "INSERT INTO sae5_6.ajoute_favori (user_id, track_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                (user_id, track_id)
+            )
+            
+            # Insérer dans user_ajoute_album_favoris
+            cursor.execute(
+                "INSERT INTO sae5_6.user_ajoute_album_favoris (user_id, album_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                (user_id, album_id)
+            )
+
+            # Insérer dans user_prefere_artist
+            cursor.execute(
+                "INSERT INTO sae5_6.user_prefere_artiste (user_id, artist_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                (user_id, artist_id)
+            )
+        
+        conn.commit()
+    print("Valeurs insérées")
+        
+        
+        
 if __name__ == "__main__":
     main()
     
