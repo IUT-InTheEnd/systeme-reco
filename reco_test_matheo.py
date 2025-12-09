@@ -152,17 +152,20 @@ print(users)
 
 print(tracks.columns.tolist())
 
-tracks20 = tracks.head(20)
+# tracks20 = tracks.head(20)
 
-def attributeVectors(tracks):
-    vectors = ['acousticness', 'energy', 'instrumentalness', 'liveness', 'speechiness', 'valence', 'danceability', 'tempo']
-    valeurs = [col for col in vectors if col in tracks.columns]
-    tracks['vector'] = tracks.apply(lambda row : [round(row[col], 2) for col in valeurs], axis=1)
-    return tracks
+# def attributeVectors(tracks):
+#     vectors = ['acousticness', 'energy', 'instrumentalness', 'liveness', 'speechiness', 'valence', 'danceability', 'tempo']
+#     valeurs = [col for col in vectors if col in tracks.columns]
+#     tracks['vector'] = tracks.apply(lambda row : [round(row[col], 2) for col in valeurs], axis=1)
+#     return tracks
 
-tracksVectors = attributeVectors(tracks20)
+# tracks_with_vectors = attributeVectors(tracks20)
+# print(tracks_with_vectors[['acousticness', 'energy', 'instrumentalness', 'liveness', 'speechiness', 'valence', 'danceability', 'tempo','vector']])
 
-print(tracksVectors['acousticness', 'energy', 'instrumentalness', 'liveness', 'speechiness', 'valence', 'danceability', 'tempo','vector'])
+vector = []
+
+
 '''
 
 établir une liste des vecteurs de cractéristiques des musiques ([pop -> 1, rock -> 2 ...; groupe -> 1, single -> 2; niveau_explicit : pas explicit -> 1, un peu -> 2, moyen -> 3, très -> 4.....])
