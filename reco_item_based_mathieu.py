@@ -152,23 +152,25 @@ users = load_users()
 print(tracks)
 print(users)
 
-sample_tracks = tracks.head(20)
+sample_tracks = tracks.head(60)
 
 # acousticness, energy instrumentalness, liveness speechiness valence danceability tempo
 
 def create_vecteurs(tracks):
-     vecteurs_valeurs = ["acousticness", "energy", "instrumentalness", "liveness", "speechiness", "valence","danceability","tempo"]
-     n = len(vecteurs_valeurs)
-     tracks["vecteur"] = np.zeros(n)
-     return tracks
+     echonest = []
+     return echonest
 
 print(tracks.columns)
 sample_tracks = create_vecteurs(sample_tracks)
 print(sample_tracks)
 
 
-#Exemple d'user
+#Exemple d'user vecteur avec le nombre de vue par son
+user = np.zeros(60)
+user[0] = 32
 
+
+vecteur_echonest = []
 
 
 '''
