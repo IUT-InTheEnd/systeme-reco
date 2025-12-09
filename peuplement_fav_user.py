@@ -61,6 +61,7 @@ def main():
                 AND (%s = 1 OR m.track_explicit = false)
                 AND m.track_duration <= %s + 30
                 AND m.track_duration >= %s - 30
+                AND m.track_id IN (SELECT track_id FROM sae5_6.track_echonest)
                 LIMIT 10;
             """
         
@@ -99,7 +100,7 @@ def main():
             )
         
         conn.commit()
-    print("Valeurs insérées")
+    print("DONE")
         
         
         
