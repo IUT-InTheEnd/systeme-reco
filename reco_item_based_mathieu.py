@@ -2,7 +2,7 @@ import math
 import numpy as np
 import pandas as pd 
 import psycopg2
-from sklearn.neighbors import NearestNeighbors
+import pycountry
 
 # fonctions de base sur les vecteurs
 
@@ -119,18 +119,45 @@ def connection_db():
     )
 
 
+
+def get_language_name(code):
+    try:
+        return pycountry.languages.get(alpha_2=code).name
+    except:
+        return "Unknown" 
+
 def load_tracks():
-    
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT * from sae5_6.track JOIN sae5_6.track_echonest on sae5_6.track.track_id =  sae5_6.track_echonest.track_id")
+    
+    cur.execute("SELECT * from sae5_6.track JOIN sae5_6.track_echonest on sae5_6.track.track_id = sae5_6.track_echonest.track_id")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
+    df = df.loc[:, ~df.columns.duplicated()]
+
+
+    query = """
+    SELECT track_id, genre_title FROM sae5_6.genre 
+    JOIN sae5_6.contient_genres on sae5_6.contient_genres.genre_id = sae5_6.genre.genre_id
+    """
+
+    cur.execute(query)
+    data_genres = cur.fetchall()
+
+    df['track_language'] = df['track_language_code'].apply(get_language_name)
 
     cur.close()
     conn.close()
+
+    df_genres = pd.DataFrame(data_genres, columns=['track_id', 'genre_title'])
+    global genres_list 
+    genres_list = df_genres["genre_title"].unique()
+    genres_par_track = df_genres.groupby('track_id')['genre_title'].apply(list)
+    df['track_genres'] = df['track_id'].map(genres_par_track)
+
     return df
+
 
 def load_users():
     
@@ -145,32 +172,46 @@ def load_users():
     conn.close()
     return df
 
+#Systeme de recommendation basique, on filtre par genres et langue préférés d'une personne
 
-tracks = load_tracks()
-users = load_users()
+def recommendation(user,n):
+    tracks = load_tracks()
 
-print(tracks)
-print(users)
+    for col_name, value in user.items(): 
+        if isinstance(value, list):
+            recommend_tracks = tracks[tracks[col_name].apply(lambda x: any(v in x for v in value))]
+        else:
+            recommend_tracks = tracks[tracks[col_name].apply(lambda x: value in x)]
+    
+    if(recommend_tracks.empty or len(recommend_tracks) < n ):
+        recommend_tracks = tracks[tracks["track_genres"].apply(lambda x: user["track_genres"] in x)]
+    return recommend_tracks["track_title"].sample(n=n)
 
-sample_tracks = tracks.head(60)
+user = {
+    "track_genres" : "Hip-Hop",
+    "track_language" : "Korean"
+}
 
-# acousticness, energy instrumentalness, liveness speechiness valence danceability tempo
+print(recommendation(user,20))
 
-def create_vecteurs(tracks):
-     echonest = []
-     return echonest
-
-print(tracks.columns)
-sample_tracks = create_vecteurs(sample_tracks)
-print(sample_tracks)
-
-
-#Exemple d'user vecteur avec le nombre de vue par son
-user = np.zeros(60)
-user[0] = 32
+def recommendation_terminal():
+    genres = input("Quelle est votre genre préféré ? ")
+    instrumental = input('Voulez-vous des sons avec des paroles(O/N)? ')
+    instrumental = True if instrumental == "N" else False
+    if(instrumental == False):
+        langue = input('Langue des paroles : ')
+    else : 
+        langue = ""
+    n = input('Nombre de tracks : ')
 
 
-vecteur_echonest = []
+    user = {
+        "track_genres" : genres,
+        "track_language" : langue,
+        "track_instrumental" : instrumental
+
+    }
+    print(recommendation(user,n))
 
 
 '''
