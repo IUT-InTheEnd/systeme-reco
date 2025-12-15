@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd 
 import psycopg2
 import pycountry
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler
 
 # fonctions de base sur les vecteurs
 
@@ -151,13 +154,44 @@ def load_tracks():
     conn.close()
 
     df_genres = pd.DataFrame(data_genres, columns=['track_id', 'genre_title'])
-    global genres_list 
-    genres_list = df_genres["genre_title"].unique()
+
     genres_par_track = df_genres.groupby('track_id')['genre_title'].apply(list)
     df['track_genres'] = df['track_id'].map(genres_par_track)
 
     return df
 
+def create_vecteur_genre(df):
+    mlb = MultiLabelBinarizer()
+    genre_matrix = mlb.fit_transform(df['track_genres'])
+    df_genres_vecteurs = pd.DataFrame(genre_matrix, columns=mlb.classes_, index=df.index)
+
+    return df_genres_vecteurs
+
+def create_vecteur_echonest(df):
+    echonest_features = [
+        'danceability', 
+        'energy', 
+        'valence', 
+        'tempo', 
+        'loudness', 
+        'acousticness', 
+        'instrumentalness', 
+        'speechiness', 
+        'liveness'
+    ]
+    features_dispo = [col for col in echonest_features if col in df.columns]
+    mlb = MultiLabelBinarizer()
+    scaler = MinMaxScaler()
+    matrix_vectors = scaler.fit_transform(df[features_dispo])
+    
+
+    return matrix_vectors
+
+def create_matrice_similitude(df,vecteur):
+    cosine_sim = cosine_similarity(vecteur)
+    
+    indices = pd.Series(df.index, index=df['track_id']).drop_duplicates()
+    return cosine_sim, indices
 
 def load_users():
     
@@ -177,22 +211,25 @@ def load_users():
 def recommendation(user,n):
     tracks = load_tracks()
 
+    quota_par_genre = math.ceil(n / len(user["track_genres"]))
+    print(quota_par_genre)
+
     for col_name, value in user.items(): 
-        if isinstance(value, list):
+        if col_name == "track_genres":
             recommend_tracks = tracks[tracks[col_name].apply(lambda x: any(v in x for v in value))]
         else:
             recommend_tracks = tracks[tracks[col_name].apply(lambda x: value in x)]
-    
     if(recommend_tracks.empty or len(recommend_tracks) < n ):
         recommend_tracks = tracks[tracks["track_genres"].apply(lambda x: user["track_genres"] in x)]
-    return recommend_tracks["track_title"].sample(n=n)
+    
+    print(recommend_tracks)
+    recommend_tracks = recommend_tracks.sample(n=n)
+    return recommend_tracks["track_title"].sample(frac=1)
 
 user = {
-    "track_genres" : "Hip-Hop",
+    "track_genres" : ["Hip-Hop","Rap"],
     "track_language" : "Korean"
 }
-
-print(recommendation(user,20))
 
 def recommendation_terminal():
     genres = input("Quelle est votre genre préféré ? ")
@@ -214,6 +251,37 @@ def recommendation_terminal():
     print(recommendation(user,n))
 
 
+
+# recommendation avec matrice de similitude avec un vecteur de genre pour une musique
+def recommendation_id(track_id, df, cosine_sim, indices, n=10):
+    try:
+        idx = indices[track_id]
+    except KeyError:
+        return pd.DataFrame() # L'ID n'existe pas
+
+    sim_scores = list(enumerate(cosine_sim[idx]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+
+    sim_scores = sim_scores[1:n+1]
+
+    track_indices = [i[0] for i in sim_scores]
+
+    return df.iloc[track_indices]
+
+tracks = load_tracks()
+v = create_vecteur_genre(tracks)
+echo = create_vecteur_echonest(tracks)
+m, indices = create_matrice_similitude(tracks,echo)
+
+id_test = tracks['track_id'].iloc[0]
+titre_test = tracks['track_title'].iloc[0]
+        
+print(f"Recommandations basées sur : {titre_test} (ID: {id_test})")
+
+recos = recommendation_id(id_test,tracks,m,indices,10)
+
+if not recos.empty:
+    print(recos[['track_title','track_genres']])
 '''
 reste à faire 
 
