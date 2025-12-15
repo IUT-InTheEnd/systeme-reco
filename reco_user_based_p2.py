@@ -95,7 +95,7 @@ def similarity_user_favorites(user1_favs, user2_favs):
     genre_sim = jaccard(genres1, genres2)
     language_sim = jaccard(languages1, languages2)
     
-    # 
+    # Poids pour chaque catégorie (a modifié on god)
     weights = {"tracks": 0.3, "artists": 0.2, "albums": 0.2, "genres": 0.2, "languages": 0.1}
     total_weight = sum(weights.values())
     
