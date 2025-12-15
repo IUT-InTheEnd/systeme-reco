@@ -20,11 +20,6 @@ def connection_db():
         port="25000"
     )
 
-# Jaccard pour chaque catégorie
-def jaccard(set_a, set_b):
-    if len(set_a | set_b) == 0:
-        return 0
-    return len(set_a & set_b) / len(set_a | set_b)
 
 def load_user_favorites(user_id, conn):
     """Load user's favorite music, artists, and albums"""
@@ -97,11 +92,11 @@ def similarity_user_favorites(user1_favs, user2_favs):
     languages1 = set(user1_favs.get("languages", []))
     languages2 = set(user2_favs.get("languages", []))
     
-    track_sim = jaccard(tracks1, tracks2)
-    artist_sim = jaccard(artists1, artists2)
-    album_sim = jaccard(albums1, albums2)
-    genre_sim = jaccard(genres1, genres2)
-    language_sim = jaccard(languages1, languages2)
+    track_sim = basicsfunctions.jaccard(tracks1, tracks2)
+    artist_sim = basicsfunctions.jaccard(artists1, artists2)
+    album_sim = basicsfunctions.jaccard(albums1, albums2)
+    genre_sim = basicsfunctions.jaccard(genres1, genres2)
+    language_sim = basicsfunctions.jaccard(languages1, languages2)
     
     # Poids pour chaque catégorie (a modifié on god)
     weights = {"tracks": 0.3, "artists": 0.2, "albums": 0.2, "genres": 0.2, "languages": 0.1}

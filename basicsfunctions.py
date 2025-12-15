@@ -107,3 +107,9 @@ def recommend(u, matr, items, n):
     return predictions[:n]  # retourner les K meilleurs
 
 # recommend(user, matr, echonest, 5)
+
+# Jaccard
+def jaccard(set_a, set_b):
+    if len(set_a | set_b) == 0:
+        return 0
+    return len(set_a & set_b) / len(set_a | set_b)
