@@ -20,6 +20,12 @@ def connection_db():
         port="25000"
     )
 
+# Jaccard pour chaque catégorie
+def jaccard(set_a, set_b):
+    if len(set_a | set_b) == 0:
+        return 0
+    return len(set_a & set_b) / len(set_a | set_b)
+
 def load_user_favorites(user_id, conn):
     """Load user's favorite music, artists, and albums"""
     cursor = conn.cursor()
@@ -39,6 +45,13 @@ def load_user_favorites(user_id, conn):
 
     cursor.execute("""SELECT language_id FROM sae5_6.user_parle langue WHERE user_id = %s""", (user_id,))
     language_fav = cursor.fetchall()
+
+    cursor.execute("""SELECT explicit_ok FROM sae5_6.user_profile WHERE user_profile_id = %s""", (user_id,))
+    explicit_pref = cursor.fetchone()
+    if explicit_pref[0] >= 0:
+        explicit_pref = True
+    else:
+        explicit_pref = False 
     
     cursor.close()
     
@@ -50,7 +63,8 @@ def load_user_favorites(user_id, conn):
         "artists": list(set([f[0] for f in artist_fav if f[0] is not None])),
         "albums": list(set([f[0] for f in album_fav if f[0] is not None])),
         "genres": [f[0] for f in genre_fav if f[0] is not None],
-        "languages": [f[0] for f in language_fav if f[0] is not None]
+        "languages": [f[0] for f in language_fav if f[0] is not None],
+        "explicit": explicit_pref
     }
 
 def get_track_features(track_id, tracks_df):
@@ -82,12 +96,6 @@ def similarity_user_favorites(user1_favs, user2_favs):
 
     languages1 = set(user1_favs.get("languages", []))
     languages2 = set(user2_favs.get("languages", []))
-    
-    # Jaccard pour chaque catégorie
-    def jaccard(set_a, set_b):
-        if len(set_a | set_b) == 0:
-            return 0
-        return len(set_a & set_b) / len(set_a | set_b)
     
     track_sim = jaccard(tracks1, tracks2)
     artist_sim = jaccard(artists1, artists2)
@@ -133,12 +141,12 @@ def find_similar_users_by_favorites(target_user_id, all_users_df, conn, similari
         if sim >= similarity_threshold:
             similar_users.append((user_id, sim))
     
-    # Sort by similarity score (descending)
+    # Trier par similarité décroissante
     similar_users.sort(key=lambda x: x[1], reverse=True)
     
     return similar_users
 
-def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, top_k=10):
+def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, get_title=False, top_k=10):
     """
     Agrège les recommandations des utilisateurs similaires
     Retourne les top-k pistes non encore notées par l'utilisateur cible
@@ -160,36 +168,61 @@ def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, t
         
         for track_id in sim_user_favs["tracks"]:
             if track_id not in target_fav_set:  # Ne pas recommander les pistes déjà favorites
-                track_scores[track_id] += similarity_score
-    
-    conn.close()
+                # N'ajoute pas la track si l'utilisateur ne veut pas de musique explicite
+                cursor = conn.cursor()
+                cursor.execute("""SELECT track_explicit FROM sae5_6.track WHERE track_id = %s""", (track_id,))
+                result = cursor.fetchone()
+                is_explicit = result[0] if result else False
+                if not is_explicit or sim_user_favs["explicit"]:
+                    track_scores[track_id] += similarity_score
     
     # Obtenir les top-k recommandations
     recommendations = track_scores.most_common(top_k)
     
+    cursor = conn.cursor()
+
+    # Ajouter les titres des pistes si demandé
+    if get_title:
+        recommendations_with_titles = []
+        for track_id, score in recommendations:
+            cursor.execute("""SELECT a.track_title, t.artist_name FROM sae5_6.track a JOIN sae5_6.realiser r ON a.track_id = r.track_id JOIN sae5_6.artist t ON r.artist_id = t.artist_id WHERE a.track_id = %s""", (track_id,))
+            result = cursor.fetchone()
+            track_title = result[0] if result else "Unknown Title"
+            artist_name = result[1] if result else "Unknown Artist"
+            recommendations_with_titles.append((track_id, track_title, artist_name, score))
+        return recommendations_with_titles
+    
+    conn.close()
+
     return recommendations
 
 if __name__ == "__main__":
     conn = connection_db()
     
-    # charge tous les utilisateurs
+    # Charge tous les utilisateurs
     all_users_df = load.load_users()
     
-    # charge les données des pistes
+    # Charge les données des pistes
     tracks_df = load.load_tracks()
+    print(tracks_df.index)
     
     target_user_id = 11
     
     # Trouver des utilisateurs similaires
     similar_users = find_similar_users_by_favorites(target_user_id, all_users_df, conn, similarity_threshold=0.1)
     
-    print(f"Aucune similarité {len(similar_users)} utilisateurs similaires pour l'utilisateur {target_user_id}")
+    print(f"Similarité avec {len(similar_users)} utilisateurs similaires pour l'utilisateur {target_user_id}")
     
     # Obtenir des recommandations
-    recommendations = recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, top_k=10)
+    recommendations = recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, get_title=True, top_k=10)
     
     print(f"Top recommendation pour user {target_user_id}:")
-    for track_id, score in recommendations:
-        print(f"Track ID: {track_id}, Score: {score:.4f}")
+    for recommendation in recommendations:
+        if len(recommendation) == 4:  # Avec titre
+            track_id, track_title, artist_name, score = recommendation
+            print(f"Track ID: {track_id}, Title: {track_title}, Artist: {artist_name}, Score: {score:.4f}")
+        else:  # Sans titre
+            track_id, score = recommendation
+            print(f"Track ID: {track_id}, Score: {score:.4f}")
     
     conn.close()
