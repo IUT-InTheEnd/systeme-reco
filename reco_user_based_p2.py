@@ -172,20 +172,20 @@ def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, t
 if __name__ == "__main__":
     conn = connection_db()
     
-    # Load all users
+    # charge tous les utilisateurs
     all_users_df = load.load_users()
     
-    # Load tracks data
+    # charge les données des pistes
     tracks_df = load.load_tracks()
     
     target_user_id = 11
     
-    # Find similar users based on favorites
+    # Trouver des utilisateurs similaires
     similar_users = find_similar_users_by_favorites(target_user_id, all_users_df, conn, similarity_threshold=0.1)
     
     print(f"Aucune similarité {len(similar_users)} utilisateurs similaires pour l'utilisateur {target_user_id}")
     
-    # Get recommendations
+    # Obtenir des recommandations
     recommendations = recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, top_k=10)
     
     print(f"Top recommendation pour user {target_user_id}:")
