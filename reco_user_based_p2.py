@@ -117,7 +117,7 @@ def find_similar_users_by_favorites(target_user_id, all_users_df, conn, similari
     target_favs = load_user_favorites(target_user_id, conn)
     
     if not any([target_favs["tracks"], target_favs["artists"], target_favs["albums"]]):
-        print(f"[Part 2] User {target_user_id} has no favorites yet")
+        print(f"L'user {target_user_id} n'a pas de favoris pour comparaison.")
         return []
     
     similar_users = []
