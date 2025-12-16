@@ -75,7 +75,7 @@ def get_track_features(track_id, tracks_df):
 def similarity_user_favorites(user1_favs, user2_favs):
     """
     Calculate la similarité entre deux utilisateurs basée sur leurs favoris
-    Utilise la similarité de Jaccard pour les ensembles de favoris
+    Utilise la similarité de cosinus pour les ensembles de favoris
     """
     tracks1 = set(user1_favs.get("tracks", []))
     tracks2 = set(user2_favs.get("tracks", []))
@@ -92,11 +92,11 @@ def similarity_user_favorites(user1_favs, user2_favs):
     languages1 = set(user1_favs.get("languages", []))
     languages2 = set(user2_favs.get("languages", []))
     
-    track_sim = basicsfunctions.jaccard(tracks1, tracks2)
-    artist_sim = basicsfunctions.jaccard(artists1, artists2)
-    album_sim = basicsfunctions.jaccard(albums1, albums2)
-    genre_sim = basicsfunctions.jaccard(genres1, genres2)
-    language_sim = basicsfunctions.jaccard(languages1, languages2)
+    track_sim = basicsfunctions.simcosinus(tracks1, tracks2)
+    artist_sim = basicsfunctions.simcosinus(artists1, artists2)
+    album_sim = basicsfunctions.simcosinus(albums1, albums2)
+    genre_sim = basicsfunctions.simcosinus(genres1, genres2)
+    language_sim = basicsfunctions.simcosinus(languages1, languages2)
     
     # Poids pour chaque catégorie (a modifié on god)
     weights = {"tracks": 0.3, "artists": 0.2, "albums": 0.2, "genres": 0.2, "languages": 0.1}
@@ -200,23 +200,24 @@ if __name__ == "__main__":
     # Charge les données des pistes
     tracks_df = load.load_tracks()
     
-    target_user_id = 11
-    
-    # Trouver des utilisateurs similaires
-    similar_users = find_similar_users_by_favorites(target_user_id, all_users_df, conn, similarity_threshold=0.1)
-    
-    print(f"Similarité avec {len(similar_users)} utilisateurs similaires pour l'utilisateur {target_user_id}")
-    
-    # Obtenir des recommandations
-    recommendations = recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, get_title=True, top_k=10)
-    
-    print(f"Top recommendation pour user {target_user_id}:")
-    for recommendation in recommendations:
-        if len(recommendation) == 4:  # Avec titre
-            track_id, track_title, artist_name, score = recommendation
-            print(f"Track ID: {track_id}, Title: {track_title}, Artist: {artist_name}, Score: {score:.4f}")
-        else:  # Sans titre
-            track_id, score = recommendation
-            print(f"Track ID: {track_id}, Score: {score:.4f}")
+    for user_id in all_users_df["user_id"].unique():
+        target_user_id = int(user_id)
+        
+        # Trouver des utilisateurs similaires
+        similar_users = find_similar_users_by_favorites(target_user_id, all_users_df, conn, similarity_threshold=0.1)
+        
+        print(f"Similarité avec {len(similar_users)} utilisateurs similaires pour l'utilisateur {target_user_id}")
+        
+        # Obtenir des recommandations
+        recommendations = recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, get_title=True, top_k=10)
+        
+        print(f"Top recommendation pour user {target_user_id}:")
+        for recommendation in recommendations:
+            if len(recommendation) == 4:  # Avec titre
+                track_id, track_title, artist_name, score = recommendation
+                print(f"Track ID: {track_id}, Title: {track_title}, Artist: {artist_name}, Score: {score:.4f}")
+            else:  # Sans titre
+                track_id, score = recommendation
+                print(f"Track ID: {track_id}, Score: {score:.4f}")
     
     conn.close()
