@@ -108,22 +108,10 @@ def recommend(u, matr, items, n):
 
 # recommend(user, matr, echonest, 5)
 
-def simcosinus(set1, set2):
-    """Calcule la similarité cosinus entre deux ensembles d'éléments."""
-    if not set1 or not set2:
+def jaccard_similarity(set1, set2):
+    """Calcule la similarité de Jaccard entre deux ensembles"""
+    union = set1 | set2
+    if len(union) == 0:
         return 0.0
-    
-    # Créer des vecteurs binaires pour les ensembles
-    all_items = list(set1.union(set2))
-    vec1 = [1 if item in set1 else -1 for item in all_items]
-    vec2 = [1 if item in set2 else -1 for item in all_items]
-    
-    # Calculer la similarité cosinus
-    dot_product = sum(a * b for a, b in zip(vec1, vec2))
-    norm1 = math.sqrt(sum(a * a for a in vec1))
-    norm2 = math.sqrt(sum(b * b for b in vec2))
-    
-    if norm1 == 0 or norm2 == 0:
-        return 0.0
-    
-    return dot_product / (norm1 * norm2)
+    intersection = set1 & set2
+    return len(intersection) / len(union)
