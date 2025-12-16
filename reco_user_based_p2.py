@@ -199,7 +199,6 @@ if __name__ == "__main__":
     
     # Charge les données des pistes
     tracks_df = load.load_tracks()
-    print(tracks_df.index)
     
     target_user_id = 11
     
