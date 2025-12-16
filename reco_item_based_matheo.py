@@ -1,6 +1,10 @@
 import math
+import numpy as np
 import pandas as pd 
 import psycopg2
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler
 
 # fonctions de base sur les vecteurs
 
@@ -117,18 +121,44 @@ def connection_db():
     )
 
 
+
+def get_language_name(code):
+    try:
+        return pycountry.languages.get(alpha_2=code).name
+    except:
+        return "Unknown" 
+
 def load_tracks():
-    
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT * from sae5_6.track JOIN sae5_6.track_echonest on sae5_6.track.track_id =  sae5_6.track_echonest.track_id")
+    
+    cur.execute("SELECT * from sae5_6.track JOIN sae5_6.track_echonest on sae5_6.track.track_id = sae5_6.track_echonest.track_id")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
+    df = df.loc[:, ~df.columns.duplicated()]
+
+
+    query = """
+    SELECT track_id, genre_title FROM sae5_6.genre 
+    JOIN sae5_6.contient_genres on sae5_6.contient_genres.genre_id = sae5_6.genre.genre_id
+    """
+
+    cur.execute(query)
+    data_genres = cur.fetchall()
+
+    df['track_language'] = df['track_language_code'].apply(get_language_name)
 
     cur.close()
     conn.close()
+
+    df_genres = pd.DataFrame(data_genres, columns=['track_id', 'genre_title'])
+
+    genres_par_track = df_genres.groupby('track_id')['genre_title'].apply(list)
+    df['track_genres'] = df['track_id'].map(genres_par_track)
+
     return df
+
 
 def load_users():
     
@@ -143,35 +173,56 @@ def load_users():
     conn.close()
     return df
 
-
-tracks = load_tracks()
-users = load_users()
-
-print(tracks)
-print(users)
-
-print(tracks.columns.tolist())
-
-# tracks20 = tracks.head(20)
-
-# def attributeVectors(tracks):
-#     vectors = ['acousticness', 'energy', 'instrumentalness', 'liveness', 'speechiness', 'valence', 'danceability', 'tempo']
-#     valeurs = [col for col in vectors if col in tracks.columns]
-#     tracks['vector'] = tracks.apply(lambda row : [round(row[col], 2) for col in valeurs], axis=1)
-#     return tracks
-
-# tracks_with_vectors = attributeVectors(tracks20)
-# print(tracks_with_vectors[['acousticness', 'energy', 'instrumentalness', 'liveness', 'speechiness', 'valence', 'danceability', 'tempo','vector']])
-
-vector = []
+def load_artists():
+    conn = connection_db()
+    cur = conn.cursor()
+    
+    cur.execute("SELECT * from sae5_6.artist JOIN sae5_6.artiste_chante on sae5_6.artist.artist_id = sae5_6.artiste_chante.artist_id JOIN sae5_6.realiser on sae5_6.realiser.artist_id = sae5_6.artist.artist_id JOIN sae5_6.album on sae5_6.album.album_id = sae5_6.realiser.album_id")
+    dataArt = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]  
+    df = pd.DataFrame(dataArt, columns=columns)
+    df = df.loc[:, ~df.columns.duplicated()]
 
 
-'''
+    query = """
+    SELECT sae5_6.artist.artist_id,  sae5_6.artist.artist_name, 
+    sae5_6.album.album_id, sae5_6.album.album_title, 
+    sae5_6.artist.artist_favorites, sae5_6.artist.artist_listens, 
+    sae5_6.album.album_favorites, sae5_6.album.album_listens, sae5_6.album.album_type   
+    FROM sae5_6.artist 
+    JOIN sae5_6.realiser on sae5_6.realiser.artist_id = sae5_6.artist.artist_id
+    JOIN sae5_6.album on sae5_6.realiser.album_id = sae5_6.album.album_id
+    """
 
-établir une liste des vecteurs de cractéristiques des musiques ([pop -> 1, rock -> 2 ...; groupe -> 1, single -> 2; niveau_explicit : pas explicit -> 1, un peu -> 2, moyen -> 3, très -> 4.....])
+    cur.execute(query)
+    data_genres = cur.fetchall()
 
-prénoter certains morceaux avec les artistes / musiques qu'ils ont proposé dans le questionnaire
 
-tester le tout en recommandant et évaluant la qualité de la recommandation
+    cur.close()
+    conn.close()
 
-'''
+    df_artist_album = pd.DataFrame(data_genres, columns=['artist_id', 'artist_name', 'album_id', 'album_title', 
+                                                   'artist_favorites', 'artist_listens', 
+                                                   'album_favorites', 'album_listens', 'album_type'])
+    return df_artist_album
+
+print(load_artists())
+
+
+def create_matrice_similitude(df,vecteur):
+    cosine_sim = cosine_similarity(vecteur)
+    
+    indices = pd.Series(df.index, index=df['artist_id']).drop_duplicates()
+    return cosine_sim, indices
+
+def create_vecteur_artist(df):
+    mlb = MultiLabelBinarizer()
+    genre_matrix = mlb.fit_transform(df)
+    df_artist_album_vecteurs = pd.DataFrame(genre_matrix, columns=mlb.classes_, index=df.index)
+
+    return df_artist_album_vecteurs
+
+def recommendation_artist(user,n):
+    artists = load_artists()
+    
+    return
