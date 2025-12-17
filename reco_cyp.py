@@ -94,9 +94,10 @@ def complete_user(new_user, df, numeric_cols, categorical_cols, bool_cols, multi
         print("[complete_user] new_user vide -> utilisation de tous les utilisateurs pour le calcul")
         filtered = df.copy()
     else:
-        # WIP : faire un OR à 50%
-        # user conservé s'il partage au moins une valeur avec new_user
-        mask = pd.Series(False, index=df.index)
+        # on conserve user_keep (OR) pour debug/fallback et on calcule aussi le filtre >=50%
+        user_keep = pd.Series(False, index=df.index)   # OR sur les attributs (existant)
+        mask_cols = []            # colonnes de masks pour le calcul 50%
+        meaningful_cols = []
 
         for col, val in provided.items():
             if col in multilabel_cols:
@@ -104,52 +105,58 @@ def complete_user(new_user, df, numeric_cols, categorical_cols, bool_cols, multi
                 if len(prov_set) == 0:
                     continue
                 ser = df[col].apply(lambda items: set(norm_list(items)))
-                mask_col = ser.apply(lambda s: len(s & prov_set) > 0)
-                mask |= mask_col.fillna(False)
+                user_keep_col = ser.apply(lambda s: len(s & prov_set) > 0).fillna(False)
+                mask_col = user_keep_col
             elif col in numeric_cols:
                 num = norm_numeric(val)
                 if num is None:
                     norm_val = norm_scalar(val)
-                    mask_col = df[col].fillna("").astype(str).str.strip().str.lower() == norm_val
+                    user_keep_col = (df[col].fillna("").astype(str).str.strip().str.lower() == norm_val).fillna(False)
                 else:
                     ser_num = pd.to_numeric(df[col], errors='coerce')
-                    mask_col = ser_num.notna() & (np.isclose(ser_num, num))
-                mask |= mask_col.fillna(False)
-            elif col in bool_cols:
-                b = norm_bool(val)
-                if b is None:
-                    mask_col = df[col].fillna("").astype(str).str.strip().str.lower() == norm_scalar(val)
-                else:
-                    ser_bool = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-                    mask_col = (ser_bool == int(b))
-                mask |= mask_col.fillna(False)
+                    user_keep_col = (ser_num.notna() & np.isclose(ser_num, num)).fillna(False)
+                mask_col = user_keep_col
             else:
                 norm_val = norm_scalar(val)
-                mask_col = df[col].fillna("").astype(str).str.strip().str.lower() == norm_val
-                mask |= mask_col.fillna(False)
+                user_keep_col = (df[col].fillna("").astype(str).str.strip().str.lower() == norm_val).fillna(False)
+                mask_col = user_keep_col
 
-        # --- DEBUG / LOG: nombre d'utilisateurs retenus + exemples (pour vérifier que ça marche) ---
-        n_selected = int(mask.sum())
+            # construire OR et stocker par-colonne
+            user_keep |= user_keep_col
+            mask_cols.append(mask_col)
+            meaningful_cols.append(col)
+
+        # logging OR-result (existant)
+        n_selected_or = int(user_keep.sum())
         total = len(df)
-        print(f"[complete_user] utilisateurs retenus pour le calcul : {n_selected}/{total}")
-        if n_selected > 0:
-            # affiche jusqu'à 5 ids pour vérification
-            if "user_id" in df.columns:
-                print("[complete_user] exemples user_id retenus :", df.loc[mask, "user_id"].head(5).tolist())
-            # pour chaque colonne multilabel fournie, affiche l'intersection moyenne / exemples
-            for col in multilabel_cols:
-                if col in provided:
-                    prov_set = set(norm_list(provided[col]))
-                    if prov_set:
-                        inter_counts = df.loc[mask, col].apply(lambda items: len(set(norm_list(items)) & prov_set) if isinstance(items, (list, tuple, set)) else 0)
-                        print(f"[complete_user] '{col}' intersections (sélection) — max:{int(inter_counts.max())}, mean:{float(inter_counts.mean()):.2f}")
-        else:
-            print("[complete_user] aucun utilisateur ne partage de valeur avec new_user -> fallback au dataset complet")
+        print(f"[complete_user] users retenus par OR (au moins 1 attribut) : {n_selected_or}/{total}")
 
-        filtered = df[mask].copy()
-        # Tout est utilisé si aucun utilisateur ne correspond
-        if filtered.shape[0] == 0:
-            filtered = df
+        # calcul du filtre >=50%
+        n_provided = len(meaningful_cols)
+        if n_provided == 0:
+            print("[complete_user] aucune colonne significative fournie -> utilisation du dataset complet")
+            filtered = df.copy()
+            final_mask = pd.Series(True, index=df.index)
+        else:
+            mask_df = pd.concat(mask_cols, axis=1)
+            matches = mask_df.sum(axis=1)
+            threshold = math.ceil(0.5 * n_provided)
+            final_mask = matches >= threshold
+
+            n_selected = int(final_mask.sum())
+            print(f"[complete_user] utilisateurs retenus >=50% : {n_selected}/{total}")
+
+            if n_selected < 5:
+                # fallback : si personne n'atteint 50%, utiliser user_keep (si non vide) sinon tout le dataset
+                if n_selected_or > 0:
+                    print("[complete_user] pas assez d'utilisateur >=50% -> fallback sur OR (au moins 1 attribut)")
+                    filtered = df[user_keep].copy()
+                else:
+                    print("[complete_user] aucun utilisateur trouvé -> utilisation du dataset complet")
+                    filtered = df.copy()
+                    final_mask = pd.Series(True, index=df.index)
+            else:
+                filtered = df.loc[final_mask].copy()
             
     # compléter uniquement les colonnes non fournies
     for col in numeric_cols:
@@ -277,7 +284,109 @@ def main():
 
     completed_df.drop(columns=["user_id", "profile_id"], errors='ignore', inplace=True)
 
-    print(completed_df)
+# ----- Fonction pour récupérer les tracks correspondants aux critères de l'utilisateur -----
+def tracks_recommendation(cursor, completed_df):
+    style = completed_df["music_style_preference"][0] # acoustique ou non
+    explicit_ok = completed_df["explicit_ok"][0]
+    avg_len = completed_df["avg_song_length"][0]
+    langs = completed_df["preference_language"][0]
+    genres = completed_df["genres_favoris"][0]
+
+    base = """
+        SELECT DISTINCT track_id, track_title, artist_name
+        FROM (sae5_6.track
+        NATURAL JOIN sae5_6.track_chanter_en
+        NATURAL JOIN sae5_6.realiser
+        NATURAL JOIN sae5_6.artist
+        NATURAL JOIN sae5_6.contient_genres
+        NATURAL JOIN sae5_6.genre
+        NATURAL JOIN sae5_6.language)
+        WHERE 1=1
+    """
+
+    params = []
+
+    # style preference
+    if style == 0:
+        base += " AND track_instrumental = true"
+    elif style == 1:
+        base += " AND track_instrumental = false"
+
+    # explicit content
+    if explicit_ok == 1:
+        base += " AND track_explicit = true"
+    else:
+        base += " AND track_explicit = false"
+
+    # track duration
+    if avg_len == 2:
+        base += " AND track_duration <= 180"
+    elif avg_len == 4.5:
+        base += " AND track_duration > 180 AND track_duration <= 360"
+    else:
+        base += " AND track_duration > 360"
+
+    # languages
+    if langs:
+        placeholders = ",".join(["%s"] * len(langs))
+        base += f" AND language_label IN ({placeholders}) "
+        params.extend(langs)
+
+    # genres
+    if genres:
+        placeholders = ",".join(["%s"] * len(genres))
+        base += f" AND genre_title IN ({placeholders})"
+        params.extend(genres)
+
+    cursor.execute(f"SELECT * FROM ({base}) ORDER BY RANDOM() LIMIT 10;", tuple(params))
+    tracks = cursor.fetchall()
+
+    return tracks
+
+# ----- Fonction pour afficher les tracks recommandés -----
+def afficher_tracks(tracks):
+    print("Recommended Tracks:")
+    for track in tracks:
+        print(f"- (ID: {track[0]}) {track[1]} by {track[2]}")
+    print("--------------")
+
+def main():
+    conn = connection_db()
+    cursor = conn.cursor()
+    
+    df = pull_data_user(cursor)
+    
+    # Nouvel utilisateur
+    new_user = {
+        "user_age": None,
+        "user_job": "Sans emploi",
+        "user_plays_music": None,
+        "user_gender": "Femme",
+        "user_instruments": [],
+        "user_music_contexts": [],
+        "music_envy_today": [],
+        "feeling": None,
+        "music_preference": None,
+        "music_style_preference": None,
+        "music_reason": [],
+        "listening_context": [],
+        "current_music_type": None,
+        "usual_listening_mode": 0,
+        "likes_discovery": 1,
+        "attend_live_concert": None,
+        "repeat_listening": None,
+        "explicit_ok": 2,
+        "avg_song_length": None,
+        "avg_daily_listen_time": None,
+        "preference_language" : [],
+        "genres_favoris": []
+    }
+    
+    completed_user = complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
+    afficher_user(completed_user)
+
+    tracks = tracks_recommendation(cursor, completed_user)
+    afficher_tracks(tracks)
 
 if __name__ == "__main__":
     main()
