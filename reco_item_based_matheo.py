@@ -161,29 +161,24 @@ def load_tracks():
 
 
 def load_users():
-    
     conn = connection_db()
     cur = conn.cursor()
     cur.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
-
     cur.close()
     conn.close()
     return df
 
-def load_artists():
+def load_artists_albums():
     conn = connection_db()
     cur = conn.cursor()
-    
     cur.execute("SELECT * from sae5_6.artist JOIN sae5_6.artiste_chante on sae5_6.artist.artist_id = sae5_6.artiste_chante.artist_id JOIN sae5_6.realiser on sae5_6.realiser.artist_id = sae5_6.artist.artist_id JOIN sae5_6.album on sae5_6.album.album_id = sae5_6.realiser.album_id")
     dataArt = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(dataArt, columns=columns)
     df = df.loc[:, ~df.columns.duplicated()]
-
-
     query = """
     SELECT sae5_6.artist.artist_id,  sae5_6.artist.artist_name, 
     sae5_6.album.album_id, sae5_6.album.album_title, 
@@ -193,20 +188,14 @@ def load_artists():
     JOIN sae5_6.realiser on sae5_6.realiser.artist_id = sae5_6.artist.artist_id
     JOIN sae5_6.album on sae5_6.realiser.album_id = sae5_6.album.album_id
     """
-
     cur.execute(query)
     data_genres = cur.fetchall()
-
-
     cur.close()
     conn.close()
-
     df_artist_album = pd.DataFrame(data_genres, columns=['artist_id', 'artist_name', 'album_id', 'album_title', 
                                                    'artist_favorites', 'artist_listens', 
                                                    'album_favorites', 'album_listens', 'album_type'])
     return df_artist_album
-
-print(load_artists())
 
 
 def create_matrice_similitude(df,vecteur):
@@ -222,7 +211,90 @@ def create_vecteur_artist(df):
 
     return df_artist_album_vecteurs
 
-def recommendation_artist(user,n):
-    artists = load_artists()
-    
-    return
+def load_realiser():
+    conn = connection_db()
+    cur = conn.cursor()
+    cur.execute("SELECT track_id, artist_id, album_id FROM sae5_6.realiser")
+    data = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]
+    df = pd.DataFrame(data, columns=columns)
+    cur.close()
+    conn.close()
+    return df
+
+
+def initialiser_donnees_globales():
+    df_tracks = load_tracks()
+    df_stats = load_artists_albums()
+    df_liens = load_realiser()
+    df_global = pd.merge(df_tracks, df_liens, on='track_id', how='inner')
+    df_global = pd.merge(df_global, df_stats, on=['artist_id', 'album_id'], how='inner')
+    df_global = df_global.drop_duplicates(subset=['track_id']).reset_index(drop=True)
+    liste = ['artist_listens', 'artist_favorites', 'album_listens', 'album_favorites']
+    for element in liste:
+        df_global[element] = np.log1p(df_global[element].fillna(0))
+    return df_global
+
+
+def preparer_vecteurs(df, mode):
+    scaler = MinMaxScaler()
+    features = pd.DataFrame(index=df.index)
+    if mode == "1" or mode == "3":
+        data_art = df[['artist_listens', 'artist_favorites']]
+        features[['art_listens', 'art_fav']] = scaler.fit_transform(data_art)
+    if mode == "2" or mode == "3":
+        data_alb = df[['album_listens', 'album_favorites']]
+        features[['alb_listens', 'alb_fav']] = scaler.fit_transform(data_alb)
+        
+        dummies = pd.get_dummies(df['album_type'], prefix='type')
+        features = pd.concat([features, dummies], axis=1)
+    return features
+
+
+def lancer_recommandation(df_complet, track_id_cible, mode_choisi):
+    if track_id_cible not in df_complet['track_id'].values:
+        print("erreur")
+        return
+    matrice_features = preparer_vecteurs(df_complet, mode_choisi)
+    index_cible = df_complet[df_complet['track_id'] == track_id_cible].index[0]
+    vecteur_cible = matrice_features.iloc[[index_cible]]
+    resultats_sim = cosine_similarity(vecteur_cible, matrice_features)
+    scores = resultats_sim[0]
+    scores_avec_index = list(enumerate(scores))
+    scores_tries = sorted(scores_avec_index, key=lambda x: x[1], reverse=True)
+    top_5 = [x for x in scores_tries if x[0] != index_cible][:5]
+    decouverte = scores_tries[-1]
+    afficher_joli_resultat(df_complet, index_cible, top_5, decouverte)
+
+
+def afficher_joli_resultat(df, index_ref, liste_recos, tuple_decouverte):
+    track_orig = df.iloc[index_ref]
+    print(f"resultats pour : {track_orig['track_title']}")
+    print(f"de : {track_orig['artist_name']}")
+    print(f"dans l'album : {track_orig['album_title']} ({track_orig['album_type']})")    
+    print("========= Nos recommandations =========")
+    for i, score in liste_recos:
+        ligne = df.iloc[i]
+        print(f"{score:.4f} - {ligne['track_title']} - {ligne['artist_name']}")
+        print("-------------------------------------------")
+
+    print("========= Nouveaux morceaux ========= ")
+    idx_dec, score_dec = tuple_decouverte
+    ligne_dec = df.iloc[idx_dec]
+    print(f"{score_dec:.4f} - {ligne_dec['track_title']} - {ligne_dec['artist_name']}")
+    print("-------------------------------------------")
+
+def main():
+    df_app = initialiser_donnees_globales()
+    while True:
+        user_input = input("id track : ")
+        try:
+            track_id = int(user_input)
+            print("[1] - Artiste, [2] - Album,[3] - Les deux")
+            mode = input("choix :")
+            lancer_recommandation(df_app, track_id, mode)
+        except ValueError:
+            print("erreur")
+            
+
+main()
