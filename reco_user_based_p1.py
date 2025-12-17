@@ -52,6 +52,58 @@ def ensure_list(x):
     else:
         return [x]
 
+# ----- Fonction pour récupérer les données utilisateurs depuis la BDD -----
+def pull_data_user(cursor):
+    cursor.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
+    users = cursor.fetchall()
+    cols_db = [desc[0] for desc in cursor.description]    # colonnes users de la BDD
+
+    # construire un mapping user_id -> [language_name, ...]
+    cursor.execute("""
+        SELECT up.user_id, l.language_label
+        FROM sae5_6.user_parle up
+        JOIN sae5_6.language l ON up.language_id = l.language_id
+    """)
+    langs = cursor.fetchall()
+    lang_map = {}
+    for uid, lname in langs:
+        lang_map.setdefault(uid, []).append(lname)
+
+    # construire un mapping user_id -> [genre_name, ...]
+    cursor.execute("""
+        SELECT ag.user_id, g.genre_title
+        FROM sae5_6.ajoute_genre_favoris ag
+        JOIN sae5_6.genre g ON ag.genre_id = g.genre_id
+    """)
+    genres = cursor.fetchall()
+    genre_map = {}
+    for uid, gname in genres:
+        genre_map.setdefault(uid, []).append(gname)
+
+    cols_keep = [c for c in columns if c in cols_db]      # intersection dans l'ordre de `columns`
+    idx_map = {c: cols_db.index(c) for c in cols_keep}    # position de chaque colonne dans `users`
+
+    # Convertir en dictionnaires en ne gardant que les colonnes sélectionnées
+    user_dicts = []
+    for user in users:
+        d = {k: user[idx_map[k]] for k in cols_keep}
+        # ajouter languages/genres associés au user_id
+        uid = d.get("user_id")
+        d["preference_language"] = lang_map.get(uid, [])
+        d["genres_favoris"] = genre_map.get(uid, [])
+        for col in multilabel_cols:
+            if col in d:
+                d[col] = ensure_list(d[col])
+        user_dicts.append(d)
+    
+    df = pd.DataFrame(user_dicts)
+    
+    # Convertir les colonnes numériques en float (coerce les valeurs invalides en NaN)
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    return df
+
 # ----- Fonction pour compléter un utilisateur peu rempli -----
 def complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols):
     user_completed = new_user.copy()
@@ -120,13 +172,6 @@ def complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
             # affiche jusqu'à 5 ids pour vérification
             if "user_id" in df.columns:
                 print("[complete_user] exemples user_id retenus :", df.loc[user_keep, "user_id"].head(5).tolist())
-            # pour chaque colonne multilabel fournie, affiche l'intersection moyenne / exemples
-            for col in multilabel_cols:
-                if col in provided:
-                    prov_set = set(norm_list(provided[col]))
-                    if prov_set:
-                        inter_counts = df.loc[user_keep, col].apply(lambda items: len(set(norm_list(items)) & prov_set) if isinstance(items, (list, tuple, set)) else 0)
-                        print(f"[complete_user] '{col}' intersections (sélection) — max:{int(inter_counts.max())}, mean:{float(inter_counts.mean()):.2f}")
         else:
             print("[complete_user] aucun utilisateur ne partage de valeur avec new_user -> fallback au dataset complet")
 
@@ -165,90 +210,8 @@ def complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
                             counter.update(items)
                 user_completed[col] = [item for item, _ in counter.most_common(TOP_K)]
     
-    return user_completed
-
-def main():
-    conn = connection_db()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
-    users = cursor.fetchall()
-    cols_db = [desc[0] for desc in cursor.description]    # colonnes users de la BDD
-
-    # construire un mapping user_id -> [language_name, ...]
-    cursor.execute("""
-        SELECT up.user_id, l.language_label
-        FROM sae5_6.user_parle up
-        JOIN sae5_6.language l ON up.language_id = l.language_id
-    """)
-    langs = cursor.fetchall()
-    lang_map = {}
-    for uid, lname in langs:
-        lang_map.setdefault(uid, []).append(lname)
-
-    # construire un mapping user_id -> [genre_name, ...]
-    cursor.execute("""
-        SELECT ag.user_id, g.genre_title
-        FROM sae5_6.ajoute_genre_favoris ag
-        JOIN sae5_6.genre g ON ag.genre_id = g.genre_id
-    """)
-    genres = cursor.fetchall()
-    genre_map = {}
-    for uid, gname in genres:
-        genre_map.setdefault(uid, []).append(gname)
-
-    #cols_db = [desc[0] for desc in cursor.description]    # colonnes de la BDD
-    cols_keep = [c for c in columns if c in cols_db]      # intersection dans l'ordre de `columns`
-    idx_map = {c: cols_db.index(c) for c in cols_keep}    # position de chaque colonne dans `users`
-
-    # Convertir en dictionnaires en ne gardant que les colonnes sélectionnées
-    user_dicts = []
-    for user in users:
-        d = {k: user[idx_map[k]] for k in cols_keep}
-        # ajouter languages/genres associés au user_id
-        uid = d.get("user_id")
-        d["preference_language"] = lang_map.get(uid, [])
-        d["genres_favoris"] = genre_map.get(uid, [])
-        for col in multilabel_cols:
-            if col in d:
-                d[col] = ensure_list(d[col])
-        user_dicts.append(d)
-    
-    df = pd.DataFrame(user_dicts)
-    
-    # Convertir les colonnes numériques en float (coerce les valeurs invalides en NaN)
-    for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    # Nouvel utilisateur
-    new_user = {
-        "user_age": None,
-        "user_job": "", # "Etudiant(e)",
-        "user_plays_music": None,
-        "user_gender": "Homme",
-        "user_instruments": [],
-        "user_music_contexts": [],
-        "music_envy_today": [],
-        "feeling": None,
-        "music_preference": None,
-        "music_style_preference": None,
-        "music_reason": [],
-        "listening_context": [],
-        "current_music_type": None,
-        "usual_listening_mode": None,
-        "likes_discovery": None,
-        "attend_live_concert": None,
-        "repeat_listening": None,
-        "explicit_ok": None,
-        "avg_song_length": None,
-        "avg_daily_listen_time": None,
-        "preference_language" : [],
-        "genres_favoris": []
-    }
-    
-    completed_user = complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
     final_cols = [c for c in df.columns if c not in ("user_id", "profile_id")] # retirer les ids
-    completed_df = pd.DataFrame([completed_user], columns=final_cols)
+    completed_df = pd.DataFrame([user_completed], columns=final_cols)
 
     # caster les colonnes numériques
     for c in numeric_cols:
@@ -272,15 +235,21 @@ def main():
         if c in completed_df.columns:
             completed_df[c] = completed_df[c].apply(to_list_cell)
 
-    #print("Completed user (DataFrame):")
-
     completed_df.drop(columns=["user_id", "profile_id"], errors='ignore', inplace=True)
 
-    #for col in completed_df.columns:
-    #    print(f"- {col}: {completed_df.at[0, col]}")
+    return completed_df
 
-    # Recherche de tracks dans la BDD
+# ----- Fonction pour afficher un utilisateur -----
+def afficher_user(completed_df):
+    print("--------------")
+    print("Completed user (DataFrame):")
 
+    for col in completed_df.columns:
+        print(f"- {col}: {completed_df.at[0, col]}")
+    print("--------------")
+
+# ----- Fonction pour récupérer et afficher les tracks recommandés -----
+def tracks_recommendation(cursor, completed_df):
     style = completed_df["music_style_preference"][0] # acoustique ou non
     explicit_ok = completed_df["explicit_ok"][0]
     avg_len = completed_df["avg_song_length"][0]
@@ -288,14 +257,13 @@ def main():
     genres = completed_df["genres_favoris"][0]
 
     base = """
-        SELECT track_id, track_title, artist_name
+        SELECT DISTINCT track_id, track_title, artist_name
         FROM (sae5_6.track
         NATURAL JOIN sae5_6.track_chanter_en
         NATURAL JOIN sae5_6.realiser
         NATURAL JOIN sae5_6.artist
         NATURAL JOIN sae5_6.contient_genres
         NATURAL JOIN sae5_6.genre
-        NATURAL JOIN sae5_6.user_profile
         NATURAL JOIN sae5_6.language)
         WHERE 1=1
     """
@@ -304,9 +272,9 @@ def main():
 
     # style preference
     if style == 0:
-        base += " AND music_style_preference = 0"
+        base += " AND track_instrumental = true"
     elif style == 1:
-        base += " AND music_style_preference = 1"
+        base += " AND track_instrumental = false"
 
     # explicit content
     if explicit_ok == 1:
@@ -331,16 +299,57 @@ def main():
     # genres
     if genres:
         placeholders = ",".join(["%s"] * len(genres))
-        base += f" AND genre_title IN ({placeholders}) "
+        base += f" AND genre_title IN ({placeholders})"
         params.extend(genres)
 
-    base += " ORDER BY RANDOM() LIMIT 10;"
-
-    cursor.execute(base, tuple(params))
+    cursor.execute(f"SELECT * FROM ({base}) ORDER BY RANDOM() LIMIT 10;", tuple(params))
     tracks = cursor.fetchall()
 
+    return tracks
+
+def afficher_tracks(tracks):
+    print("Recommended Tracks:")
     for track in tracks:
-        print(f"- (ID: {track[0]}) {track[1]} by {track[2]} ")
+        print(f"- (ID: {track[0]}) {track[1]} by {track[2]}")
+    print("--------------")
+
+def main():
+    conn = connection_db()
+    cursor = conn.cursor()
+    
+    df = pull_data_user(cursor)
+    
+    # Nouvel utilisateur
+    new_user = {
+        "user_age": 20,
+        "user_job": "Sans emploi",
+        "user_plays_music": 1,
+        "user_gender": "Homme",
+        "user_instruments": ['Piano / Orgues'],
+        "user_music_contexts": ["Détente"],
+        "music_envy_today": ['Positif et enjoué'],
+        "feeling": 2,
+        "music_preference": 0,
+        "music_style_preference": 1,
+        "music_reason": ['Motivation'],
+        "listening_context": ['Trajet','Détente'],
+        "current_music_type": 1,
+        "usual_listening_mode": 0,
+        "likes_discovery": 1,
+        "attend_live_concert": 1,
+        "repeat_listening": 2,
+        "explicit_ok": 2,
+        "avg_song_length": 2,
+        "avg_daily_listen_time": 68,
+        "preference_language" : ["Spanish","English","Japanese"],
+        "genres_favoris": ["Jazz","Hip-Hop","Experimental Pop","Rock"]
+    }
+    
+    completed_user = complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
+    afficher_user(completed_user)
+
+    tracks = tracks_recommendation(cursor, completed_user)
+    afficher_tracks(tracks)
 
 if __name__ == "__main__":
     main()
