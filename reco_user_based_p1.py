@@ -138,9 +138,10 @@ def complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
         print("[complete_user] new_user vide -> utilisation de tous les utilisateurs pour le calcul")
         filtered = df.copy()
     else:
-        # WIP : faire un OR à 50%
-        # user conservé s'il partage au moins une valeur avec new_user
-        user_keep = pd.Series(False, index=df.index)
+        # on conserve user_keep (OR) pour debug/fallback et on calcule aussi le filtre >=50%
+        user_keep = pd.Series(False, index=df.index)   # OR sur les attributs (existant)
+        mask_cols = []            # colonnes de masks pour le calcul 50%
+        meaningful_cols = []
 
         for col, val in provided.items():
             if col in multilabel_cols:
@@ -148,37 +149,58 @@ def complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
                 if len(prov_set) == 0:
                     continue
                 ser = df[col].apply(lambda items: set(norm_list(items)))
-                user_keep_col = ser.apply(lambda s: len(s & prov_set) > 0)
-                user_keep |= user_keep_col.fillna(False)
+                user_keep_col = ser.apply(lambda s: len(s & prov_set) > 0).fillna(False)
+                mask_col = user_keep_col
             elif col in numeric_cols:
                 num = norm_numeric(val)
                 if num is None:
                     norm_val = norm_scalar(val)
-                    user_keep_col = df[col].fillna("").astype(str).str.strip().str.lower() == norm_val
+                    user_keep_col = (df[col].fillna("").astype(str).str.strip().str.lower() == norm_val).fillna(False)
                 else:
                     ser_num = pd.to_numeric(df[col], errors='coerce')
-                    user_keep_col = ser_num.notna() & (np.isclose(ser_num, num))
-                user_keep |= user_keep_col.fillna(False)
+                    user_keep_col = (ser_num.notna() & np.isclose(ser_num, num)).fillna(False)
+                mask_col = user_keep_col
             else:
                 norm_val = norm_scalar(val)
-                user_keep_col = df[col].fillna("").astype(str).str.strip().str.lower() == norm_val
-                user_keep |= user_keep_col.fillna(False)
+                user_keep_col = (df[col].fillna("").astype(str).str.strip().str.lower() == norm_val).fillna(False)
+                mask_col = user_keep_col
 
-        # --- DEBUG / LOG: nombre d'utilisateurs retenus + exemples (pour vérifier que ça marche) ---
-        n_selected = int(user_keep.sum())
+            # construire OR et stocker par-colonne
+            user_keep |= user_keep_col
+            mask_cols.append(mask_col)
+            meaningful_cols.append(col)
+
+        # logging OR-result (existant)
+        n_selected_or = int(user_keep.sum())
         total = len(df)
-        print(f"[complete_user] utilisateurs retenus pour le calcul : {n_selected}/{total}")
-        if n_selected > 0:
-            # affiche jusqu'à 5 ids pour vérification
-            if "user_id" in df.columns:
-                print("[complete_user] exemples user_id retenus :", df.loc[user_keep, "user_id"].head(5).tolist())
-        else:
-            print("[complete_user] aucun utilisateur ne partage de valeur avec new_user -> fallback au dataset complet")
+        print(f"[complete_user] users retenus par OR (au moins 1 attribut) : {n_selected_or}/{total}")
 
-        filtered = df[user_keep].copy()
-        # Tout est utilisé si aucun utilisateur ne correspond
-        if filtered.shape[0] == 0:
-            filtered = df
+        # calcul du filtre >=50%
+        n_provided = len(meaningful_cols)
+        if n_provided == 0:
+            print("[complete_user] aucune colonne significative fournie -> utilisation du dataset complet")
+            filtered = df.copy()
+            final_mask = pd.Series(True, index=df.index)
+        else:
+            mask_df = pd.concat(mask_cols, axis=1)
+            matches = mask_df.sum(axis=1)
+            threshold = math.ceil(0.5 * n_provided)
+            final_mask = matches >= threshold
+
+            n_selected = int(final_mask.sum())
+            print(f"[complete_user] utilisateurs retenus >=50% : {n_selected}/{total}")
+
+            if n_selected < 5:
+                # fallback : si personne n'atteint 50%, utiliser user_keep (si non vide) sinon tout le dataset
+                if n_selected_or > 0:
+                    print("[complete_user] pas assez d'utilisateur >=50% -> fallback sur OR (au moins 1 attribut)")
+                    filtered = df[user_keep].copy()
+                else:
+                    print("[complete_user] aucun utilisateur trouvé -> utilisation du dataset complet")
+                    filtered = df.copy()
+                    final_mask = pd.Series(True, index=df.index)
+            else:
+                filtered = df.loc[final_mask].copy()
             
     # compléter uniquement les colonnes non fournies
     for col in numeric_cols:
@@ -248,7 +270,7 @@ def afficher_user(completed_df):
         print(f"- {col}: {completed_df.at[0, col]}")
     print("--------------")
 
-# ----- Fonction pour récupérer et afficher les tracks recommandés -----
+# ----- Fonction pour récupérer les tracks correspondants aux critères de l'utilisateur -----
 def tracks_recommendation(cursor, completed_df):
     style = completed_df["music_style_preference"][0] # acoustique ou non
     explicit_ok = completed_df["explicit_ok"][0]
@@ -307,6 +329,7 @@ def tracks_recommendation(cursor, completed_df):
 
     return tracks
 
+# ----- Fonction pour afficher les tracks recommandés -----
 def afficher_tracks(tracks):
     print("Recommended Tracks:")
     for track in tracks:
@@ -321,28 +344,28 @@ def main():
     
     # Nouvel utilisateur
     new_user = {
-        "user_age": 20,
+        "user_age": None,
         "user_job": "Sans emploi",
-        "user_plays_music": 1,
-        "user_gender": "Homme",
-        "user_instruments": ['Piano / Orgues'],
-        "user_music_contexts": ["Détente"],
-        "music_envy_today": ['Positif et enjoué'],
-        "feeling": 2,
-        "music_preference": 0,
-        "music_style_preference": 1,
-        "music_reason": ['Motivation'],
-        "listening_context": ['Trajet','Détente'],
-        "current_music_type": 1,
+        "user_plays_music": None,
+        "user_gender": "Femme",
+        "user_instruments": [],
+        "user_music_contexts": [],
+        "music_envy_today": [],
+        "feeling": None,
+        "music_preference": None,
+        "music_style_preference": None,
+        "music_reason": [],
+        "listening_context": [],
+        "current_music_type": None,
         "usual_listening_mode": 0,
         "likes_discovery": 1,
-        "attend_live_concert": 1,
-        "repeat_listening": 2,
+        "attend_live_concert": None,
+        "repeat_listening": None,
         "explicit_ok": 2,
-        "avg_song_length": 2,
-        "avg_daily_listen_time": 68,
-        "preference_language" : ["Spanish","English","Japanese"],
-        "genres_favoris": ["Jazz","Hip-Hop","Experimental Pop","Rock"]
+        "avg_song_length": None,
+        "avg_daily_listen_time": None,
+        "preference_language" : [],
+        "genres_favoris": []
     }
     
     completed_user = complete_user(new_user, df, numeric_cols, categorical_cols, multilabel_cols)
