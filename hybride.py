@@ -13,7 +13,7 @@ def hybride_recommendation(track_id, n, compareGenre, target_user_id, get_title=
     similar_users = reco_user_based_p2.find_similar_users_by_favorites(target_user_id, all_users_df, conn, similarity_threshold=0.1)
 
     # Obtenir des recommandations user-based
-    recommendations_ub = reco_user_based_p2.recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, get_title=True, top_k=top_k)
+    recommendations_ub = reco_user_based_p2.recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, get_title, top_k)
 
     # Obtenir des recommandations item-based
     recommendations_ib = reco_steph_echonest.echonest_recommend(target_user_id, track_id, n, compareGenre)
@@ -48,7 +48,7 @@ def hybride_recommendation(track_id, n, compareGenre, target_user_id, get_title=
                 if rec2[0] == rec[0]:
                     recommendations.append(rec[0])
 
-        # Compléter si nécessaire
+        # pour compléter avec des recommandations pas en communs afin d'atteindre n
         if len(recommendations) < n:
             i = 0
             j = 0
@@ -70,7 +70,7 @@ def hybride_recommendation(track_id, n, compareGenre, target_user_id, get_title=
                 if rec2[0] == rec[0]:
                     recommendations.append(rec[0])
 
-        # Compléter
+        # pour compléter avec des recommandations pas en communs afin d'atteindre n
         if len(recommendations) < n:
             i = 0
             j = 0
@@ -88,11 +88,13 @@ def hybride_recommendation(track_id, n, compareGenre, target_user_id, get_title=
 
     return recommendations
 
-"""
 # ---------- TEST ----------
-simi = hybride_recommendation(156031, 10, True, 4, False, 10)
+
+tracks_artists = load.load_realiser()
+
+
+simi = hybride_recommendation(track_id=156031, target_user_id=4, n=10, compareGenre=True, get_title=False, top_k=10)
 
 print("Recommandations hybrides :")
 for rec in simi:
-    print(rec)
-"""
+    print(tracks_artists[tracks_artists['track_id'] == rec]['track_id', 'track_title', 'artist_name'].values)

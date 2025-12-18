@@ -1,4 +1,3 @@
-
 import math
 import pandas as pd 
 
@@ -92,21 +91,6 @@ def itemBased(u, i, matr, items):
 
     return sNumerateur / sDenominateur
 
-
-# tester l'item-based sur chaque musique que l'utilisateur n'a pas écouté et recommander les musiques avec la prédiction la plus élevée
-def recommend(u, matr, items, n):
-    predictions = []
-
-    for i in range(len(items)):
-        if matr[u][i] == 0:   # l’utilisateur n’a pas noté l’item
-            pred = itemBased(u, i, matr, items)
-            predictions.append((i, pred))
-
-    predictions.sort(key=lambda x: x[1], reverse=True) # trier pour pouvoir renvoyer les n meilleures
-
-    return predictions[:n]  # retourner les K meilleurs
-
-# recommend(user, matr, echonest, 5)
 
 def jaccard_similarity(set1, set2):
     """Calcule la similarité de Jaccard entre deux ensembles"""
