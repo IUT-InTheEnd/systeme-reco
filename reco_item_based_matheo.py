@@ -2,7 +2,6 @@ import math
 import numpy as np
 import pandas as pd 
 import psycopg2
-from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import MinMaxScaler
 
@@ -121,13 +120,6 @@ def connection_db():
     )
 
 
-
-def get_language_name(code):
-    try:
-        return pycountry.languages.get(alpha_2=code).name
-    except:
-        return "Unknown" 
-
 def load_tracks():
     conn = connection_db()
     cur = conn.cursor()
@@ -146,9 +138,6 @@ def load_tracks():
 
     cur.execute(query)
     data_genres = cur.fetchall()
-
-    df['track_language'] = df['track_language_code'].apply(get_language_name)
-
     cur.close()
     conn.close()
 
@@ -197,20 +186,6 @@ def load_artists_albums():
                                                    'album_favorites', 'album_listens', 'album_type'])
     return df_artist_album
 
-
-def create_matrice_similitude(df,vecteur):
-    cosine_sim = cosine_similarity(vecteur)
-    
-    indices = pd.Series(df.index, index=df['artist_id']).drop_duplicates()
-    return cosine_sim, indices
-
-def create_vecteur_artist(df):
-    mlb = MultiLabelBinarizer()
-    genre_matrix = mlb.fit_transform(df)
-    df_artist_album_vecteurs = pd.DataFrame(genre_matrix, columns=mlb.classes_, index=df.index)
-
-    return df_artist_album_vecteurs
-
 def load_realiser():
     conn = connection_db()
     cur = conn.cursor()
@@ -223,76 +198,78 @@ def load_realiser():
     return df
 
 
-def initialiser_donnees_globales():
+def init():
     df_tracks = load_tracks()
-    df_stats = load_artists_albums()
-    df_liens = load_realiser()
-    df_global = pd.merge(df_tracks, df_liens, on='track_id', how='inner')
-    df_global = pd.merge(df_global, df_stats, on=['artist_id', 'album_id'], how='inner')
-    df_global = df_global.drop_duplicates(subset=['track_id']).reset_index(drop=True)
+    df_artist_album = load_artists_albums()
+    df_realiser = load_realiser()
+    df_init = pd.merge(df_tracks, df_realiser, on='track_id', how='inner')
+    df_init = pd.merge(df_init, df_artist_album, on=['artist_id', 'album_id'], how='inner')
+    df_init = df_init.drop_duplicates(subset=['track_id']).reset_index(drop=True)
     liste = ['artist_listens', 'artist_favorites', 'album_listens', 'album_favorites']
     for element in liste:
-        df_global[element] = np.log1p(df_global[element].fillna(0))
-    return df_global
+        df_init[element] = np.log1p(df_init[element].fillna(0))
+    return df_init
 
 
-def preparer_vecteurs(df, mode):
+def create_vecteurs(df, mode):
     scaler = MinMaxScaler()
     features = pd.DataFrame(index=df.index)
     if mode == "1" or mode == "3":
-        data_art = df[['artist_listens', 'artist_favorites']]
-        features[['art_listens', 'art_fav']] = scaler.fit_transform(data_art)
+        artist_data = df[['artist_listens', 'artist_favorites']]
+        features[['art_listens', 'art_fav']] = scaler.fit_transform(artist_data)
     if mode == "2" or mode == "3":
-        data_alb = df[['album_listens', 'album_favorites']]
-        features[['alb_listens', 'alb_fav']] = scaler.fit_transform(data_alb)
+        album_data = df[['album_listens', 'album_favorites']]
+        features[['alb_listens', 'alb_fav']] = scaler.fit_transform(album_data)
         
         dummies = pd.get_dummies(df['album_type'], prefix='type')
         features = pd.concat([features, dummies], axis=1)
     return features
 
 
-def lancer_recommandation(df_complet, track_id_cible, mode_choisi):
+def recommandation_artiste_album(df_complet, track_id_cible, mode_choisi):
     if track_id_cible not in df_complet['track_id'].values:
         print("erreur")
         return
-    matrice_features = preparer_vecteurs(df_complet, mode_choisi)
-    index_cible = df_complet[df_complet['track_id'] == track_id_cible].index[0]
-    vecteur_cible = matrice_features.iloc[[index_cible]]
-    resultats_sim = cosine_similarity(vecteur_cible, matrice_features)
-    scores = resultats_sim[0]
-    scores_avec_index = list(enumerate(scores))
-    scores_tries = sorted(scores_avec_index, key=lambda x: x[1], reverse=True)
-    top_5 = [x for x in scores_tries if x[0] != index_cible][:5]
-    decouverte = scores_tries[-1]
-    afficher_joli_resultat(df_complet, index_cible, top_5, decouverte)
+    matrice = create_vecteurs(df_complet, mode_choisi)
+    i_cible = df_complet[df_complet['track_id'] == track_id_cible].index[0]
+    vecteur_cible = matrice.iloc[[i_cible]]
+    resSimilarite = cosine_similarity(vecteur_cible, matrice)
+    scores = resSimilarite[0]
+    scores_i = list(enumerate(scores))
+    scores_top = sorted(scores_i, key=lambda x: x[1], reverse=True)
+    top_5 = [x for x in scores_top if x[0] != i_cible][:5]
+    decouverte = scores_top[-1]
+    afficher_joli_resultat(df_complet, i_cible, top_5, decouverte)
 
 
-def afficher_joli_resultat(df, index_ref, liste_recos, tuple_decouverte):
-    track_orig = df.iloc[index_ref]
-    print(f"resultats pour : {track_orig['track_title']}")
-    print(f"de : {track_orig['artist_name']}")
-    print(f"dans l'album : {track_orig['album_title']} ({track_orig['album_type']})")    
+def afficher_joli_resultat(df, id_cible, liste_recos, couple_decouverte):
+    tracks_cible = df.iloc[id_cible]
+    print(f"resultats pour : {tracks_cible['track_title']}")
+    print(f"de : {tracks_cible['artist_name']}")
+    print(f"dans l'album : {tracks_cible['album_title']} ({tracks_cible['album_type']})")    
     print("========= Nos recommandations =========")
     for i, score in liste_recos:
         ligne = df.iloc[i]
-        print(f"{score:.4f} - {ligne['track_title']} - {ligne['artist_name']}")
+        print(f"{score} - {ligne['track_title']} - {ligne['artist_name']}")
         print("-------------------------------------------")
 
     print("========= Nouveaux morceaux ========= ")
-    idx_dec, score_dec = tuple_decouverte
-    ligne_dec = df.iloc[idx_dec]
-    print(f"{score_dec:.4f} - {ligne_dec['track_title']} - {ligne_dec['artist_name']}")
+    i_decouverte, score_decouverte = couple_decouverte
+    decouverte = df.iloc[i_decouverte]
+    print(f"{score_decouverte} - {decouverte['track_title']} - {decouverte['artist_name']}")
     print("-------------------------------------------")
 
+
+
 def main():
-    df_app = initialiser_donnees_globales()
+    df_test = init()
     while True:
-        user_input = input("id track : ")
+        input_cible = input("id track : ")
         try:
-            track_id = int(user_input)
+            track_id = int(input_cible)
             print("[1] - Artiste, [2] - Album,[3] - Les deux")
             mode = input("choix :")
-            lancer_recommandation(df_app, track_id, mode)
+            recommandation_artiste_album(df_test, track_id, mode)
         except ValueError:
             print("erreur")
             
