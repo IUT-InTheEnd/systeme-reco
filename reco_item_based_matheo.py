@@ -273,5 +273,3 @@ def main():
         except ValueError:
             print("erreur")
             
-
-main()
