@@ -59,5 +59,7 @@ def get_pred_for_user(user_id, track_id, sim=similarity_user_favorites) :
         nume += simmilarity
     return deno / nume
 
+"""
 if __name__ == "__main__" :
     get_pred_for_user(12, 155880)
+"""
