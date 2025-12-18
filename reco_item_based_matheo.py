@@ -260,7 +260,7 @@ def afficher_joli_resultat(df, id_cible, liste_recos, couple_decouverte):
     print("-------------------------------------------")
 
 
-
+"""
 def main():
     df_test = init()
     while True:
@@ -272,4 +272,4 @@ def main():
             recommandation_artiste_album(df_test, track_id, mode)
         except ValueError:
             print("erreur")
-            
+"""         

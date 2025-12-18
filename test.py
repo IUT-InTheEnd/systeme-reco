@@ -21,10 +21,8 @@ def connection_db():
 
 def afficher_menu():
     """Affiche le menu principal"""
-    print("\n" + "="*60)
-    print("SYSTÈME DE RECOMMANDATION MUSICALE - MENU PRINCIPAL")
-    print("="*60)
-    print("\n[1] Recommandation User-Based (Part 1)")
+    print("-"*60)
+    print("[1] Recommandation User-Based (Part 1)")
     print("[2] Recommandation User-Based (Part 2)")
     print("[3] Recommandation User-Based (Part 3)")
     print("[4] Recommandation Item-Based (Echonest Stéphane)")
@@ -325,7 +323,7 @@ def test_hybrid_recommendation():
 
     compare_genre_bool = compare_genre.strip().lower() == "o"
 
-    print(f"\n🔀 Mélange des approches pour l'utilisateur {user_id}...")
+    print(f"\nMélange des approches pour l'utilisateur {user_id}...")
 
     try:
         # Appel de la recommandation hybride
@@ -365,9 +363,7 @@ def test_hybrid_recommendation():
 def main():
     """Fonction principale"""
     conn = connection_db()
-    
-    print("\nBienvenue dans le système de recommandation musicale!")
-    
+        
     while True:
         afficher_menu()
         choix = input("\nChoisissez une option: ")

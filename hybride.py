@@ -88,10 +88,11 @@ def hybride_recommendation(track_id, n, compareGenre, target_user_id, get_title=
 
     return recommendations
 
-
+"""
 # ---------- TEST ----------
 simi = hybride_recommendation(156031, 10, True, 4, False, 10)
 
 print("Recommandations hybrides :")
 for rec in simi:
     print(rec)
+"""

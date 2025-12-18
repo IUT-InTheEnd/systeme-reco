@@ -101,6 +101,7 @@ def recommendation_id(track_id, df, cosine_sim, indices, sim_ratio, seuil_sim, n
 
     return result_df
 
+"""
 vecteur1 = create_vecteur_popularity(tracks)
 vecteur2 = create_vecteur_genre(tracks)
 
@@ -123,7 +124,4 @@ if not recos.empty:
     print(recos[['track_title','track_genres','track_listens','score_similarite']])
 else:
     print('Aucune recommandation trouvée.')
-
-
-
-
+"""

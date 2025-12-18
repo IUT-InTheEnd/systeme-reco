@@ -202,6 +202,7 @@ def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, g
 
     return recommendations
 
+"""
 if __name__ == "__main__":
     conn = connection_db()
     
@@ -234,3 +235,4 @@ if __name__ == "__main__":
             track_id, score = recommendation
             print(f"Track ID: {track_id}, Score: {score:.4f}")                    
     conn.close()
+"""

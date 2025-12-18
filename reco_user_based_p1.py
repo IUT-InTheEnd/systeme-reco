@@ -374,5 +374,7 @@ def main():
     tracks = tracks_recommendation(cursor, completed_user)
     afficher_tracks(tracks)
 
+"""
 if __name__ == "__main__":
     main()
+"""
