@@ -28,14 +28,14 @@ def get_pred_for_user(user_id, track_id, sim=similarity_user_favorites) :
     users = pd.DataFrame(data, columns=columns)
 
     cur.execute(f"SELECT artist_id, album_id, language_id FROM sae5_6.track NATURAL JOIN sae5_6.realiser NATURAL JOIN sae5_6.track_chanter_en WHERE track_id = {track_id};")
-    data = cur.fetchall()[0]
+    track_data = cur.fetchall()[0]
     cur.execute(f"SELECT genre_id FROM sae5_6.contient_genres WHERE track_id = {track_id};")
     data = cur.fetchall()
     track_info = {
-        "artist": data[0],
-        "album": data[1],
+        "artist": track_data[0],
+        "album": track_data[1],
         "genres": [i[0] for i in data],
-        "language": data[2]
+        "language": track_data[2]
         }
     user_fav = load_user_favorites(user_id, conn)
     if all(len(val) == 0 for val in user_fav.values()) :
