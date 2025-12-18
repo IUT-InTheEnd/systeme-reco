@@ -107,3 +107,11 @@ def recommend(u, matr, items, n):
     return predictions[:n]  # retourner les K meilleurs
 
 # recommend(user, matr, echonest, 5)
+
+def jaccard_similarity(set1, set2):
+    """Calcule la similarité de Jaccard entre deux ensembles"""
+    union = set1 | set2
+    if len(union) == 0:
+        return 0.0
+    intersection = set1 & set2
+    return len(intersection) / len(union)
