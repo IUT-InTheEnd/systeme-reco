@@ -22,14 +22,14 @@ def note(listens, is_track_fav, is_artist_fav, is_album_fav, is_genre_fav, liste
 def get_pred_for_user(user_id, track_id, sim=similarity_user_favorites) :
     conn = load.connection_db()
     cur = conn.cursor()
-    cur.execute(f"SELECT user_id, nb_ecoute FROM sae5_6.user_ecoute WHERE track_id = {track_id};")
+    cur.execute(f"SELECT user_id, nb_ecoute FROM user_ecoute WHERE track_id = {track_id};")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]
     users = pd.DataFrame(data, columns=columns)
 
-    cur.execute(f"SELECT artist_id, album_id, language_id FROM sae5_6.track NATURAL JOIN sae5_6.realiser NATURAL JOIN sae5_6.track_chanter_en WHERE track_id = {track_id};")
+    cur.execute(f"SELECT artist_id, album_id, language_id FROM track NATURAL JOIN realiser NATURAL JOIN track_chanter_en WHERE track_id = {track_id};")
     track_data = cur.fetchall()[0]
-    cur.execute(f"SELECT genre_id FROM sae5_6.contient_genres WHERE track_id = {track_id};")
+    cur.execute(f"SELECT genre_id FROM contient_genres WHERE track_id = {track_id};")
     data = cur.fetchall()
     track_info = {
         "artist": track_data[0],

@@ -54,15 +54,15 @@ def ensure_list(x):
 
 # ----- Fonction pour récupérer les données utilisateurs depuis la BDD -----
 def pull_data_user(cursor):
-    cursor.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
+    cursor.execute("SELECT * FROM \"user\" u JOIN user_profile up ON u.profile_id = up.user_profile_id;")
     users = cursor.fetchall()
     cols_db = [desc[0] for desc in cursor.description]    # colonnes users de la BDD
 
     # construire un mapping user_id -> [language_name, ...]
     cursor.execute("""
         SELECT up.user_id, l.language_label
-        FROM sae5_6.user_parle up
-        JOIN sae5_6.language l ON up.language_id = l.language_id
+        FROM user_parle up
+        JOIN language l ON up.language_id = l.language_id
     """)
     langs = cursor.fetchall()
     lang_map = {}
@@ -72,8 +72,8 @@ def pull_data_user(cursor):
     # construire un mapping user_id -> [genre_name, ...]
     cursor.execute("""
         SELECT ag.user_id, g.genre_title
-        FROM sae5_6.ajoute_genre_favoris ag
-        JOIN sae5_6.genre g ON ag.genre_id = g.genre_id
+        FROM ajoute_genre_favoris ag
+        JOIN genre g ON ag.genre_id = g.genre_id
     """)
     genres = cursor.fetchall()
     genre_map = {}
@@ -280,13 +280,13 @@ def tracks_recommendation(cursor, completed_df):
 
     base = """
         SELECT DISTINCT track_id, track_title, artist_name
-        FROM (sae5_6.track
-        NATURAL JOIN sae5_6.track_chanter_en
-        NATURAL JOIN sae5_6.realiser
-        NATURAL JOIN sae5_6.artist
-        NATURAL JOIN sae5_6.contient_genres
-        NATURAL JOIN sae5_6.genre
-        NATURAL JOIN sae5_6.language)
+        FROM (track
+        NATURAL JOIN track_chanter_en
+        NATURAL JOIN realiser
+        NATURAL JOIN artist
+        NATURAL JOIN contient_genres
+        NATURAL JOIN genre
+        NATURAL JOIN language)
         WHERE 1=1
     """
 

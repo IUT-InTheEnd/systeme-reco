@@ -22,7 +22,7 @@ def get_language_name(code):
 def load_realiser():
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT * from sae5_6.realiser JOIN sae5_6.artist ON sae5_6.realiser.artist_id = sae5_6.artist.artist_id JOIN sae5_6.track on sae5_6.track.track_id =  sae5_6.realiser.track_id ")
+    cur.execute("SELECT * from realiser JOIN artist ON realiser.artist_id = artist.artist_id JOIN track on track.track_id =  realiser.track_id ")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
@@ -36,7 +36,7 @@ def load_realiser():
 def load_users():
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
+    cur.execute("SELECT * FROM \"user\" u JOIN user_profile up ON u.profile_id = up.user_profile_id;")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
@@ -50,7 +50,7 @@ def load_tracks():
     conn = connection_db()
     cur = conn.cursor()
     
-    cur.execute("SELECT * from sae5_6.track JOIN sae5_6.track_echonest on sae5_6.track.track_id = sae5_6.track_echonest.track_id")
+    cur.execute("SELECT * from track JOIN track_echonest on track.track_id = track_echonest.track_id")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
@@ -58,8 +58,8 @@ def load_tracks():
 
 
     query = """
-    SELECT track_id, genre_title FROM sae5_6.genre 
-    JOIN sae5_6.contient_genres on sae5_6.contient_genres.genre_id = sae5_6.genre.genre_id
+    SELECT track_id, genre_title FROM genre 
+    JOIN contient_genres on contient_genres.genre_id = genre.genre_id
     """
 
     cur.execute(query)
@@ -81,7 +81,7 @@ def load_tracks():
 def load_genres():
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM sae5_6.genre;")
+    cur.execute("SELECT * FROM genre;")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)

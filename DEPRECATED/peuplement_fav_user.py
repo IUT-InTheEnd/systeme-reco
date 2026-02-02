@@ -15,7 +15,7 @@ def main():
     print("Creating fav tracks / artists / album from genres and other data...")
     
     # Pull les datas users et leurs profils
-    cursor.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
+    cursor.execute("SELECT * FROM \"user\" u JOIN user_profile up ON u.profile_id = up.user_profile_id;")
     users = cursor.fetchall()
     for user in users:
         user_id = user[0]
@@ -46,7 +46,7 @@ def main():
         user_recommanded_artists = user[25]
 
         # Récupère les genres préférés de l'utilisateur
-        cursor.execute("SELECT genre_id FROM sae5_6.ajoute_genre_favoris WHERE user_id = %s;", (user_id,))
+        cursor.execute("SELECT genre_id FROM ajoute_genre_favoris WHERE user_id = %s;", (user_id,))
         fav_genres = cursor.fetchall()
         fav_genres_ids = []
         fav_genres_ids = [genre[0] for genre in fav_genres]
@@ -54,14 +54,14 @@ def main():
         # Récupère les musics qui satisfait le genre favoris, l'explicit ok, la durée moyenne des chansons
         query = """
                 SELECT m.track_id, r.artist_id, r.album_id
-                FROM (sae5_6.track m
-                    INNER JOIN sae5_6.realiser r ON m.track_id = r.track_id)
-                    INNER JOIN sae5_6.contient_genres cg ON m.track_id = cg.track_id
+                FROM (track m
+                    INNER JOIN realiser r ON m.track_id = r.track_id)
+                    INNER JOIN contient_genres cg ON m.track_id = cg.track_id
                 WHERE cg.genre_id = ANY(%s)
                 AND (%s = 1 OR m.track_explicit = false)
                 AND m.track_duration <= %s + 30
                 AND m.track_duration >= %s - 30
-                AND m.track_id IN (SELECT track_id FROM sae5_6.track_echonest)
+                AND m.track_id IN (SELECT track_id FROM track_echonest)
                 LIMIT 10;
             """
         
@@ -77,25 +77,25 @@ def main():
             
             # Insérer dans user_ecoute
             cursor.execute(
-                "INSERT INTO sae5_6.user_ecoute (user_id, track_id, nb_ecoute) VALUES (%s, %s, FLOOR(RANDOM() * 300) + 1) ON CONFLICT DO NOTHING;",
+                "INSERT INTO user_ecoute (user_id, track_id, nb_ecoute) VALUES (%s, %s, FLOOR(RANDOM() * 300) + 1) ON CONFLICT DO NOTHING;",
                 (user_id, track_id)
             )
             
             # Insérer dans ajoute_favori
             cursor.execute(
-                "INSERT INTO sae5_6.ajoute_favori (user_id, track_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                "INSERT INTO ajoute_favori (user_id, track_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
                 (user_id, track_id)
             )
             
             # Insérer dans user_ajoute_album_favoris
             cursor.execute(
-                "INSERT INTO sae5_6.user_ajoute_album_favoris (user_id, album_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                "INSERT INTO user_ajoute_album_favoris (user_id, album_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
                 (user_id, album_id)
             )
 
             # Insérer dans user_prefere_artist
             cursor.execute(
-                "INSERT INTO sae5_6.user_prefere_artiste (user_id, artist_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
+                "INSERT INTO user_prefere_artiste (user_id, artist_id) VALUES (%s, %s) ON CONFLICT DO NOTHING;",
                 (user_id, artist_id)
             )
         

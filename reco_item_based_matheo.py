@@ -124,7 +124,7 @@ def load_tracks():
     conn = connection_db()
     cur = conn.cursor()
     
-    cur.execute("SELECT * from sae5_6.track JOIN sae5_6.track_echonest on sae5_6.track.track_id = sae5_6.track_echonest.track_id")
+    cur.execute("SELECT * from track JOIN track_echonest on track.track_id = track_echonest.track_id")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
@@ -132,8 +132,8 @@ def load_tracks():
 
 
     query = """
-    SELECT track_id, genre_title FROM sae5_6.genre 
-    JOIN sae5_6.contient_genres on sae5_6.contient_genres.genre_id = sae5_6.genre.genre_id
+    SELECT track_id, genre_title FROM genre 
+    JOIN contient_genres on contient_genres.genre_id = genre.genre_id
     """
 
     cur.execute(query)
@@ -152,7 +152,7 @@ def load_tracks():
 def load_users():
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM sae5_6.user u JOIN sae5_6.user_profile up ON u.profile_id = up.user_profile_id;")
+    cur.execute("SELECT * FROM \"user\" u JOIN user_profile up ON u.profile_id = up.user_profile_id;")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(data, columns=columns)
@@ -163,19 +163,19 @@ def load_users():
 def load_artists_albums():
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT * from sae5_6.artist JOIN sae5_6.artiste_chante on sae5_6.artist.artist_id = sae5_6.artiste_chante.artist_id JOIN sae5_6.realiser on sae5_6.realiser.artist_id = sae5_6.artist.artist_id JOIN sae5_6.album on sae5_6.album.album_id = sae5_6.realiser.album_id")
+    cur.execute("SELECT * from artist JOIN artiste_chante on artist.artist_id = artiste_chante.artist_id JOIN realiser on realiser.artist_id = artist.artist_id JOIN album on album.album_id = realiser.album_id")
     dataArt = cur.fetchall()
     columns = [desc[0] for desc in cur.description]  
     df = pd.DataFrame(dataArt, columns=columns)
     df = df.loc[:, ~df.columns.duplicated()]
     query = """
-    SELECT sae5_6.artist.artist_id,  sae5_6.artist.artist_name, 
-    sae5_6.album.album_id, sae5_6.album.album_title, 
-    sae5_6.artist.artist_favorites, sae5_6.artist.artist_listens, 
-    sae5_6.album.album_favorites, sae5_6.album.album_listens, sae5_6.album.album_type   
-    FROM sae5_6.artist 
-    JOIN sae5_6.realiser on sae5_6.realiser.artist_id = sae5_6.artist.artist_id
-    JOIN sae5_6.album on sae5_6.realiser.album_id = sae5_6.album.album_id
+    SELECT artist.artist_id,  artist.artist_name, 
+    album.album_id, album.album_title, 
+    artist.artist_favorites, artist.artist_listens, 
+    album.album_favorites, album.album_listens, album.album_type   
+    FROM artist 
+    JOIN realiser on realiser.artist_id = artist.artist_id
+    JOIN album on realiser.album_id = album.album_id
     """
     cur.execute(query)
     data_genres = cur.fetchall()
@@ -189,7 +189,7 @@ def load_artists_albums():
 def load_realiser():
     conn = connection_db()
     cur = conn.cursor()
-    cur.execute("SELECT track_id, artist_id, album_id FROM sae5_6.realiser")
+    cur.execute("SELECT track_id, artist_id, album_id FROM realiser")
     data = cur.fetchall()
     columns = [desc[0] for desc in cur.description]
     df = pd.DataFrame(data, columns=columns)

@@ -12,13 +12,13 @@ conn = psycopg2.connect(
     )
 
 cur = conn.cursor()
-cur.execute("SELECT * FROM sae5_6.ajoute_favori;")
+cur.execute("SELECT * FROM ajoute_favori;")
 data = cur.fetchall()
 columns = [desc[0] for desc in cur.description]
 df = pd.DataFrame(data, columns=columns)
 # print(df.head())
 
-insert_sql = "INSERT INTO sae5_6.user_ecoute (user_id, track_id, nb_ecoute) VALUES "
+insert_sql = "INSERT INTO user_ecoute (user_id, track_id, nb_ecoute) VALUES "
 
 for index, row in df.iterrows() :
     nb_ecoute = floor(np.random.normal(5000, 2500))

@@ -23,22 +23,22 @@ def load_user_favorites(user_id, conn):
     cursor = conn.cursor()
     
     # Charger les favoris de l'utilisateur
-    cursor.execute("""SELECT track_id FROM sae5_6.ajoute_favori WHERE user_id = %s""", (user_id,))
+    cursor.execute("""SELECT track_id FROM ajoute_favori WHERE user_id = %s""", (user_id,))
     track_fav = cursor.fetchall()
     
-    cursor.execute("""SELECT artist_id FROM sae5_6.user_prefere_artiste WHERE user_id = %s""", (user_id,))
+    cursor.execute("""SELECT artist_id FROM user_prefere_artiste WHERE user_id = %s""", (user_id,))
     artist_fav = cursor.fetchall()
     
-    cursor.execute("""SELECT album_id FROM sae5_6.user_ajoute_album_favoris WHERE user_id = %s""", (user_id,))
+    cursor.execute("""SELECT album_id FROM user_ajoute_album_favoris WHERE user_id = %s""", (user_id,))
     album_fav = cursor.fetchall()
     
-    cursor.execute("""SELECT genre_id FROM sae5_6.ajoute_genre_favoris WHERE user_id = %s""", (user_id,))
+    cursor.execute("""SELECT genre_id FROM ajoute_genre_favoris WHERE user_id = %s""", (user_id,))
     genre_fav = cursor.fetchall()
 
-    cursor.execute("""SELECT language_id FROM sae5_6.user_parle langue WHERE user_id = %s""", (user_id,))
+    cursor.execute("""SELECT language_id FROM user_parle langue WHERE user_id = %s""", (user_id,))
     language_fav = cursor.fetchall()
 
-    cursor.execute("""SELECT explicit_ok FROM sae5_6.user_profile WHERE user_profile_id = %s""", (user_id,))
+    cursor.execute("""SELECT explicit_ok FROM user_profile WHERE user_profile_id = %s""", (user_id,))
     explicit_pref = cursor.fetchone()
     if explicit_pref[0] >= 0:
         explicit_pref = True
@@ -176,7 +176,7 @@ def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, g
             if track_id not in target_fav_set:  # Ne pas recommander les pistes déjà favorites
                 # N'ajoute pas la track si l'utilisateur ne veut pas de musique explicite
                 cursor = conn.cursor()
-                cursor.execute("""SELECT track_explicit FROM sae5_6.track WHERE track_id = %s""", (track_id,))
+                cursor.execute("""SELECT track_explicit FROM track WHERE track_id = %s""", (track_id,))
                 result = cursor.fetchone()
                 is_explicit = result[0] if result else False
                 if not is_explicit or sim_user_favs["explicit"]:
@@ -191,7 +191,7 @@ def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, g
     if get_title:
         recommendations_with_titles = []
         for track_id, score in recommendations:
-            cursor.execute("""SELECT a.track_title, t.artist_name FROM sae5_6.track a JOIN sae5_6.realiser r ON a.track_id = r.track_id JOIN sae5_6.artist t ON r.artist_id = t.artist_id WHERE a.track_id = %s""", (track_id,))
+            cursor.execute("""SELECT a.track_title, t.artist_name FROM track a JOIN realiser r ON a.track_id = r.track_id JOIN artist t ON r.artist_id = t.artist_id WHERE a.track_id = %s""", (track_id,))
             result = cursor.fetchone()
             track_title = result[0] if result else "Unknown Title"
             artist_name = result[1] if result else "Unknown Artist"
@@ -202,7 +202,7 @@ def recommend_based_on_similar_users(target_user_id, similar_users, tracks_df, g
 
     return recommendations
 
-"""
+
 if __name__ == "__main__":
     conn = connection_db()
     
@@ -235,4 +235,3 @@ if __name__ == "__main__":
             track_id, score = recommendation
             print(f"Track ID: {track_id}, Score: {score:.4f}")                    
     conn.close()
-"""
