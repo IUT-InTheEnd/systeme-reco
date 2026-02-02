@@ -1,160 +1,194 @@
 import pandas as pd
+import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import basicsfunctions
 import load
 
+# ============================================================
+# Chargement des données
+# ============================================================
 
 tracks = load.load_tracks()
 users = load.load_users()
 artists_tracks = load.load_realiser()
 genres = load.load_genres()
 
-# print(tracks)
-# print(users)
+# ============================================================
+# Normalisation du tempo
+# ============================================================
 
-# normalisation du tempo pour qu'il soit entre 0 et 1
 scaler = MinMaxScaler()
 tracks['tempo_norm'] = scaler.fit_transform(tracks[['tempo']])
 
-# vecteurs pour echonest
-echonest = {}
+# ============================================================
+# Construction des vecteurs Echonest (vectorisée)
+# ============================================================
 
-for _, row in tracks.iterrows():
-    track_id = row['track_id'] #pour les tracks sans echonest
+ECHONEST_FEATURES = [
+    'acousticness',
+    'energy',
+    'instrumentalness',
+    'liveness',
+    'speechiness',
+    'valence',
+    'danceability',
+    'tempo_norm'
+]
 
-    # les tracks avec echonest, track_id est une Serie
-    if isinstance(track_id, pd.Series):
-        track_id = track_id.iloc[0]
+echonest = dict(
+    zip(
+        tracks['track_id'],
+        tracks[ECHONEST_FEATURES].to_numpy().tolist()
+    )
+)
 
-    echonest[track_id] = [
-        row['acousticness'],
-        row['energy'],
-        row['instrumentalness'],
-        row['liveness'],
-        row['speechiness'],
-        row['valence'],
-        row['danceability'],
-        row['tempo_norm']
-    ]
+# ============================================================
+# Pré-calculs (accès O(1))
+# ============================================================
 
+# explicit par track
+track_explicit = tracks.set_index('track_id')['track_explicit'].to_dict()
 
-#affichage des 10 premiers éléments de echonest
-# for i, (key, value) in enumerate(echonest.items()):
-#     if i >= 10:
-#         break
-#     print(key, value)
+# genres par track
+track_genres = tracks.set_index('track_id')['track_genres'].to_dict()
 
+# mapping genre -> parent
+genre_to_parent = (
+    genres
+    .set_index('genre_title')['genre_parent_id']
+    .dropna()
+    .to_dict()
+)
 
-def hasSameParentGenre(track_id1, track_id2):
-    g1 = tracks.loc[tracks['track_id'] == track_id1, 'track_genres'].values[0]
-    g2 = tracks.loc[tracks['track_id'] == track_id2, 'track_genres'].values[0]
-
-    if not isinstance(g1, list) or not isinstance(g2, list):
-        return False
-    if len(g1) == None or len(g2) == None:
-        return False
-
-    parents1 = genres.loc[
-        genres['genre_title'].isin(g1),
-        'genre_parent_id'
-    ].dropna()
-
-    parents2 = genres.loc[
-        genres['genre_title'].isin(g2),
-        'genre_parent_id'
-    ].dropna()
-
-    return len(set(parents1) & set(parents2)) > 0
-
-
-def hasSameGenre(track_id1, track_id2):
-    g1 = tracks.loc[tracks['track_id'] == track_id1, 'track_genres'].values[0]
-    g2 = tracks.loc[tracks['track_id'] == track_id2, 'track_genres'].values[0]
-
-    if not isinstance(g1, list) or not isinstance(g2, list):
-        return False
-    if len(g1) == None or len(g2) == None:
-        return False
-
-    return len(set(g1) & set(g2)) > 0
-
-def get_explicit_track(track_id):
-    explicit = tracks.loc[tracks['track_id'] == track_id, 'track_explicit'].values[0]
-    return explicit
-
-def get_explicit_user(user_id):
-    explicit = users.loc[users['user_id'] == user_id, 'explicit_ok'].values[0]
-    return explicit >= 0
-
-# user explicit : false    ---->  track explicit : false  
-# user explicit : true     ---->  track explicit : true/false
-
-def verifie_explicit(user, track_id):
-    res = True
-    if((get_explicit_user(user) == False) and (get_explicit_track(track_id) != False)):
-        res = False
-    return res
-
-
-def echonest_recommend(user, track_id, n, compareGenre): #prend en entrée un id de track et un nombre n qui va correspondre au nombre de tracks recommandés qui vont être renvoyés 
-    if(track_id in echonest.keys()): #on vérifie si le track comporte des données echonest
-        sim = [] #liste qui va contenir des tuples comrpenant le track_id et la similarité 
-        echo = echonest[track_id] #on récupère les données echonest du track prit en entré
-        for key in echonest.keys():  #on parcourt tous les tracks d'echonest
-            if(key!=track_id): #on vérifie si le track_id en entrée est différent de celui qu'on compare actuellement
-                if (verifie_explicit(user, key)): #on regarde si les préférences explicites de l'utilisateur correspondent à celles du track de départ
-                    similarity = basicsfunctions.simCos(echo, echonest[key]) #calcul de la similarité avec simCos du fichier basicsfunctions réalisé en TD
-                    # on ajoute les similarités des tracks qui font parti du même genre parent que le track de départ
-                    if(compareGenre and (hasSameGenre(track_id, key) or hasSameParentGenre(track_id, key))):
-                        sim.append((key, similarity))#on ajoute la similarité couplé avec son track_id dans la liste sim
-                    elif not compareGenre: #s'il ne veut pas que ce soit du même genre forcément
-                        sim.append((key, similarity))
-
-        sim.sort(key=lambda x: x[1], reverse=True)
-
-        if len(sim) < n:
-            n = len(sim)
-            print("Pas assez de musiques similaires dans la base de données, on en renvoie que", n)
-
-        # cas découverte
-        if users.loc[users['user_id'] == user, 'likes_discovery'].values[0] > 2 and n > 1:
-            decouverte = sim[-1]
-            recommandations = sim[:n-1] + [decouverte]
-        else:
-            recommandations = sim
-
-        return recommandations[:n]
-
+# parents par track
+track_parent_genres = {}
+for tid, g_list in track_genres.items():
+    if isinstance(g_list, list):
+        track_parent_genres[tid] = {
+            genre_to_parent[g]
+            for g in g_list
+            if g in genre_to_parent
+        }
     else:
+        track_parent_genres[tid] = set()
+
+# préférences utilisateurs
+user_explicit_ok = users.set_index('user_id')['explicit_ok'].to_dict()
+user_discovery = users.set_index('user_id')['likes_discovery'].to_dict()
+
+# ============================================================
+# Fonctions utilitaires
+# ============================================================
+
+def verifie_explicit(user_id, track_id):
+    """
+    user explicit : false -> track explicit interdit
+    user explicit : true  -> tout autorisé
+    """
+    return (
+        user_explicit_ok[user_id] >= 0
+        or not track_explicit.get(track_id, False)
+    )
+
+
+def has_same_genre(t1, t2):
+    return bool(
+        set(track_genres.get(t1, []))
+        & set(track_genres.get(t2, []))
+    )
+
+
+def has_same_parent_genre(t1, t2):
+    return bool(
+        track_parent_genres.get(t1, set())
+        & track_parent_genres.get(t2, set())
+    )
+
+# ============================================================
+# Recommandation Echonest (optimisée)
+# ============================================================
+
+def echonest_recommend(user_id, track_id, n=5, compareGenre=True):
+
+    if track_id not in echonest:
         print("Track_id sans données echonest")
-        return 0
+        return []
+
+    base_vector = echonest[track_id]
+    base_genres = set(track_genres.get(track_id, []))
+    base_parents = track_parent_genres.get(track_id, set())
+
+    similarities = []
+
+    for other_id, other_vector in echonest.items():
+        if other_id == track_id:
+            continue
+
+        # filtre explicit
+        if not verifie_explicit(user_id, other_id):
+            continue
+
+        # 🎵 filtre genre
+        if compareGenre:
+            other_genres = track_genres.get(other_id, [])
+            if not isinstance(other_genres, list):
+                other_genres = []
+            other_genres = set(other_genres)
+
+            base_genres = track_genres.get(track_id, [])
+            if not isinstance(base_genres, list):
+                base_genres = []
+            base_genres = set(base_genres)
+
+            if not (
+                base_genres & other_genres
+                or base_parents & track_parent_genres.get(other_id, set())
+            ):
+                continue
+
+        # similarité cosinus
+        sim = basicsfunctions.simCos(base_vector, other_vector)
+        similarities.append((other_id, sim))
+
+    if not similarities:
+        return []
+
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    n = min(n, len(similarities))
+
+    # 🌱 mode découverte
+    if user_discovery[user_id] > 2 and n > 1:
+        return similarities[:n-1] + [similarities[-1]]
+
+    return similarities[:n]
 
 
-# #test
-# #track_id_test = 1052 # musique explicite
-# track_id_test = 156031 # musique rajoutée proposée par un utilisateur
-# # track_id_test = 4104 # musique non explicite
-# user_id_test = 1  # user qui aime les musiques explicites et la découverte
-# # user_id_test = 10 # user qui n'aime pas les musiques explicites et la découverte
-# simi = echonest_recommend(user_id_test, track_id_test, 5, True)
 
-# #on écupère le titre et l'artiste 
-# rows_test = artists_tracks.loc[
-#     artists_tracks['track_id'] == track_id_test,
-#     ['track_title', 'artist_name']
-# ]
+#test
+#track_id_test = 1052 # musique explicite
+track_id_test = 156031 # musique rajoutée proposée par un utilisateur
+# track_id_test = 4104 # musique non explicite
+user_id_test = 1  # user qui aime les musiques explicites et la découverte
+# user_id_test = 10 # user qui n'aime pas les musiques explicites et la découverte
+simi = echonest_recommend(user_id_test, track_id_test, 5, True)
 
-# if rows_test.empty:
-#     print(f"Musique de départ : Track {track_id_test} - Artiste inconnu")
-# else:
-#     titre_test = rows_test.iloc[0].tolist()
-#     print(f"Musique de départ : {titre_test[0]} - {titre_test[1]}")
+#on écupère le titre et l'artiste 
+rows_test = artists_tracks.loc[
+    artists_tracks['track_id'] == track_id_test,
+    ['track_title', 'artist_name']
+]
+
+if rows_test.empty:
+    print(f"Musique de départ : Track {track_id_test} - Artiste inconnu")
+else:
+    titre_test = rows_test.iloc[0].tolist()
+    print(f"Musique de départ : {titre_test[0]} - {titre_test[1]}")
 
 
-# #affichage des titres et artistes des n musiques les plus similaires
-# print("\nMusiques recommandées :")
-# for couple in simi:
-#     track_id = couple[0]
-#     similarity = couple[1]
-#     titre = artists_tracks.loc[artists_tracks['track_id'] == track_id,['track_title', 'artist_name']].iloc[0].tolist()
-#     print(f"{titre[0]} - {titre[1]} (similarity: {similarity})")
+#affichage des titres et artistes des n musiques les plus similaires
+print("\nMusiques recommandées :")
+for couple in simi:
+    track_id = couple[0]
+    similarity = couple[1]
+    titre = artists_tracks.loc[artists_tracks['track_id'] == track_id,['track_title', 'artist_name']].iloc[0].tolist()
+    print(f"{titre[0]} - {titre[1]} (similarity: {similarity})")
