@@ -6,10 +6,13 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "cython>=3.2.4",
+    "langcodes>=3.5.1",
     "matplotlib>=3.10.8",
+    "numpy>=2.3.5",
     "pandas>=2.3.3",
     "psycopg2-binary>=2.9.11",
     "pycountry>=24.6.1",
+    "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
     "setuptools>=80.10.2",
 ]
