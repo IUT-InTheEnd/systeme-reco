@@ -1,0 +1,15 @@
+[project]
+name = "systeme-reco"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cython>=3.2.4",
+    "matplotlib>=3.10.8",
+    "pandas>=2.3.3",
+    "psycopg2-binary>=2.9.11",
+    "pycountry>=24.6.1",
+    "seaborn>=0.13.2",
+    "setuptools>=80.10.2",
+]
